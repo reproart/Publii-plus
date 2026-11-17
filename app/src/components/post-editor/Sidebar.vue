@@ -434,6 +434,8 @@
                     </div>
                 </div>
 
+                <plus-slot name="post-editor-sidebar" :context="$parent" /><!-- PUBLII-PLUS -->
+
                 <div class="options-sidebar-item">
                     <div
                         :class="{ 'options-sidebar-header': true, 'is-open': openedItem === 'other' }"

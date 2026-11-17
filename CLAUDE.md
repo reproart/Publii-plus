@@ -28,4 +28,8 @@ npx electron-builder install-app-deps   # rebuild native modules before running 
 Run the app headless for checks: `xvfb-run -a` + Playwright `_electron.launch({ args: ['<repo>/app', '--no-sandbox'] })`
 (launch the `app/` dir, not `app/main.js`, so `productName` is applied).
 
+AI Assistant: `app/back-end/plus/extensions/ai-assistant/` (providers, tasks, config/secrets) +
+`app/src/plus/extensions/ai-assistant/` (AiPanel, AiSettings, editor-adapter). UI styles must use design tokens
+(`npm run audit:design-system`): `--space-*`, `--font-size-ui-*`, `--color-*`; root font-size is 10px.
+
 Specs for Vue components follow the upstream pattern (vue-template-compiler + vm, render vnodes, no DOM).

@@ -23,6 +23,8 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 | `app/back-end/app-preload.js` | `mainProcessAPI.invoke` пропускает каналы `plus:<расширение>:<метод>` | вызовы основного процесса из расширений |
 | `app/src/main.js` | `import PubliiPlus` + `Vue.use(PubliiPlus)` | реестр расширений в интерфейсе, компонент `<plus-slot>` |
 | `app/src/components/About.vue` | `<plus-slot name="about" />` | версия Publii Plus и список расширений |
+| `app/src/components/post-editor/Sidebar.vue` | `<plus-slot name="post-editor-sidebar" :context="$parent" />` перед «Other options» | панель AI Assistant в редакторе |
+| `app/src/components/AppSettings.vue` | `<plus-slot name="app-settings" />` после последней группы | настройки AI-провайдеров |
 | `README.md` | заметка о форке в начале файла | ссылка на этот документ |
 | `.github/workflows/plus-*.yml` | новые файлы | CI, сборка Windows, синхронизация с upstream |
 
@@ -90,4 +92,27 @@ npm run prod
 Обе части подключаются автоматически. Пример — расширение `core` (строка Publii Plus на экране About).
 Ошибка в одном расширении не мешает остальным; список загруженных и упавших расширений виден на экране About.
 
-Доступные слоты: `about`.
+Доступные слоты:
+
+| Слот | Где | `context` |
+|---|---|---|
+| `about` | экран About | — |
+| `post-editor-sidebar` | боковая панель редактора записи/страницы (все три редактора) | компонент редактора: `postData`, `$refs`, `itemType` |
+| `app-settings` | Settings приложения, после всех групп | — |
+
+## AI Assistant (расширение `ai-assistant`)
+
+- **Провайдеры** — Settings → «AI providers (Publii Plus)». Два протокола: OpenAI Responses API и
+  OpenAI-совместимый Chat Completions (OpenRouter, Ollama, LM Studio, vLLM, свой сервер) по http или https.
+  Шаблоны: OpenAI, OpenRouter, Ollama, LM Studio, Custom. Можно задать заголовок авторизации, свои заголовки,
+  температуру, лимит токенов, таймаут; «Load models» берёт список из `/models`, «Test connection» делает пробный запрос.
+- **Ключи** — в системной связке ключей (`publii-plus-ai`); если она недоступна — зашифрованы средствами Electron
+  в `config/publii-plus-ai.secrets.json`; если недоступно и это — ключ не сохраняется. Ключи не передаются в интерфейс.
+  Настройки без ключей: `Documents/Publii/config/publii-plus-ai.json`.
+- **Структурированный ответ** — JSON Schema; если сервер её не поддерживает, автоматически JSON через промпт;
+  при невалидном ответе — одна попытка исправления.
+- **В редакторе** (секция «AI Assistant» в боковой панели): SEO (meta title ≤ 70, description ≤ 160, slug),
+  теги (сначала существующие), черновик по описанию (Markdown → HTML для визуального редактора),
+  переписывание выделенного фрагмента. Всё применяется только по кнопке; запросы можно отменить.
+- **Ограничения**: блочный редактор — только SEO, теги и копирование черновика (вставка и переписывание недоступны).
+- **Приватность**: заголовок и текст записи отправляются выбранному провайдеру. Для полностью локальной работы — Ollama/LM Studio.

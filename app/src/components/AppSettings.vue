@@ -457,6 +457,8 @@
                 </field>
             </fields-group>
 
+            <plus-slot name="app-settings" /><!-- PUBLII-PLUS -->
+
             <p-footer>
                 <p-button
                     :onClick="checkBeforeSave"
