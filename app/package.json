@@ -1,9 +1,9 @@
 {
-  "productName": "Publii",
-  "name": "Publii",
+  "productName": "Publii Plus",
+  "name": "publii-plus",
   "version": "0.48.3",
-  "description": "Static Site CMS",
-  "desktopName": "publii.desktop",
+  "description": "Static Site CMS – Publii Plus (fork of Publii)",
+  "desktopName": "publii-plus.desktop",
   "main": "main.js",
   "scripts": {
     "start": "electron main.js"
@@ -15,16 +15,16 @@
   },
   "license": "GPL-3.0",
   "repository": {
-    "url": "https://github.com/GetPublii/Publii/"
+    "url": "https://github.com/reproart/Publii-plus/"
   },
   "bugs": {
-    "url": "https://github.com/GetPublii/Publii/issues"
+    "url": "https://github.com/reproart/Publii-plus/issues"
   },
   "files": [
     "**/*",
     "dist/**/*"
   ],
-  "homepage": "https://getpublii.com",
+  "homepage": "https://github.com/reproart/Publii-plus",
   "dependencies": {
     "@jimp/core": "1.6.1",
     "@jimp/js-jpeg": "1.6.1",

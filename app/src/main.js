@@ -4,6 +4,7 @@ import store from './store/index';
 import router from './router';
 import VueI18n from 'vue-i18n';
 import App from './components/App';
+import PubliiPlus from './plus/registry'; // PUBLII-PLUS: extension registry (see FORK.md)
 import DOMPurify from 'dompurify';
 import {
     DEFAULT_APP_APPEARANCE,
@@ -229,6 +230,7 @@ mainProcessAPI.receive('app-data-loaded', function (initialData) {
     Vue.component('authors-dropdown', AuthorsDropDown);
     Vue.component('tags-dropdown', TagsDropDown);
     Vue.component('repeater', Repeater);
+    Vue.use(PubliiPlus); // PUBLII-PLUS
 
     const i18n = new VueI18n({
         locale: initialData.currentLanguage.name,

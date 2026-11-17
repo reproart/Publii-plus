@@ -1,9 +1,9 @@
 {
-  "productName": "Publii",
-  "name": "Publii",
+  "productName": "Publii Plus",
+  "name": "publii-plus",
   "version": "0.48.3",
-  "description": "Static Site CMS",
-  "homepage": "https://getpublii.com",
+  "description": "Static Site CMS – Publii Plus (fork of Publii)",
+  "homepage": "https://github.com/reproart/Publii-plus",
   "author": {
     "name": "TidyCustoms",
     "email": "bob@tidycustoms.net"
@@ -18,7 +18,7 @@
     "notarize": "xcrun notarytool submit ./dist/$npm_config_file --keychain-profile 'Publii' --wait",
     "start": "electron app/main.js --enable-logging",
     "pretest": "node build/scripts/check-test-runtime.js",
-    "test": "npm run audit:design-system && mocha \"build/scripts/specs/**/*.spec.js\" \"app/back-end/**/*.spec.js\" \"app/src/helpers/specs/**/*.spec.js\" \"app/src/components/specs/**/*.spec.js\" --reporter spec",
+    "test": "npm run audit:design-system && mocha \"build/scripts/specs/**/*.spec.js\" \"app/back-end/**/*.spec.js\" \"app/src/helpers/specs/**/*.spec.js\" \"app/src/components/specs/**/*.spec.js\" \"app/src/plus/**/*.spec.js\" --reporter spec",
     "audit:design-system": "node build/scripts/audit-design-system.js",
     "licenses": "node build/scripts/generate-licenses.js",
     "licenses:check": "node build/scripts/generate-licenses.js --check",
@@ -31,10 +31,10 @@
     "packager:linux": "electron-builder build --linux"
   },
   "repository": {
-    "url": "https://github.com/GetPublii/Publii/"
+    "url": "https://github.com/reproart/Publii-plus/"
   },
   "bugs": {
-    "url": "https://github.com/GetPublii/Publii/issues"
+    "url": "https://github.com/reproart/Publii-plus/issues"
   },
   "keywords": [],
   "devDependencies": {
@@ -52,10 +52,10 @@
     "webpack-cli": "5.1.4"
   },
   "build": {
-    "appId": "com.tidycustoms.publii",
+    "appId": "com.reproart.publiiplus",
     "electronVersion": "43.8.7",
-    "productName": "Publii",
-    "copyright": "Copyright (C) 2016-2026 TidyCustoms. All rights reserved.",
+    "productName": "Publii Plus",
+    "copyright": "Copyright (C) 2016-2026 TidyCustoms. Publii Plus modifications (C) 2026 reproart. GPL-3.0.",
     "asar": true,
     "toolsets": {
       "appimage": "1.0.2"
@@ -94,7 +94,7 @@
       ],
       "category": "Development",
       "description": "Static Site CMS",
-      "executableName": "Publii",
+      "executableName": "publii-plus",
       "syncDesktopName": true
     },
     "win": {
@@ -121,7 +121,8 @@
     "dmg": {
       "sign": false,
       "icon": "build/installation/volume.icns",
-      "title": "Install Publii"
-    }
+      "title": "Install Publii Plus"
+    },
+    "artifactName": "Publii-Plus-${version}-${os}-${arch}.${ext}"
   }
 }

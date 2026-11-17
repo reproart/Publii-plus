@@ -12,6 +12,7 @@
             </p-header>
 
             <p class="about-version">{{ $t('publii.currentPubliiVersion') }}: {{ appVersion.version }} (build {{ appVersion.build }})</p>
+            <plus-slot name="about" /><!-- PUBLII-PLUS -->
 
             <fields-group>
                 <p class="about-copyright">

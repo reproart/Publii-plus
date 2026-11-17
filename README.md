@@ -1,3 +1,6 @@
+> **Publii Plus** — форк Publii с дополнительными возможностями. Что изменено, как собирать и как
+> обновляться с официального Publii — в [FORK.md](FORK.md). Оригинальный README ниже.
+
 # Publii - Static CMS for privacy-focused, SEO-optimized websites.
 
 [![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/GetPublii/Publii/blob/master/LICENSE)

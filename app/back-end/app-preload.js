@@ -303,7 +303,8 @@ contextBridge.exposeInMainWorld('mainProcessAPI', {
             'app-site:thumbnails-summary'
         ];
 
-        if (validCommands.includes(command)) {
+        // PUBLII-PLUS: also allow Publii Plus extension channels "plus:<extension>:<method>" (see FORK.md)
+        if (validCommands.includes(command) || /^plus:[a-z0-9][a-z0-9-]*:[a-zA-Z0-9][a-zA-Z0-9:_-]*$/.test(command)) {
             return ipcRenderer.invoke(command, ...data);
         } else {
             console.info('Event: ', command, ' is not supported in invoke');

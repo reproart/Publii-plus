@@ -1,0 +1,89 @@
+# Publii Plus: keep branch "upstream" equal to official Publii and propose merging it into master.
+# Weekly + manual. The PR is opened by the workflow, so CI does not start on it automatically
+# (GitHub rule for GITHUB_TOKEN) – this job therefore test-merges and runs the tests itself
+# and reports the result in the PR.
+name: Sync upstream Publii
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'   # Mondays 05:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Update branch "upstream"
+        run: |
+          git remote add publii https://github.com/GetPublii/Publii.git
+          git fetch publii master
+          git push --force origin refs/remotes/publii/master:refs/heads/upstream
+          echo "UPSTREAM_SHA=$(git rev-parse refs/remotes/publii/master)" >> "$GITHUB_ENV"
+
+      - name: Check whether master already contains upstream
+        id: state
+        run: |
+          if git merge-base --is-ancestor "$UPSTREAM_SHA" origin/master; then
+            echo "behind=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "behind=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test merge and run tests
+        if: steps.state.outputs.behind == 'true'
+        id: trial
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q origin/master
+          if git merge --no-edit "$UPSTREAM_SHA" > merge.log 2>&1; then
+            echo "merge=clean" >> "$GITHUB_OUTPUT"
+            npm ci && npm ci --prefix app
+            if npm test > test.log 2>&1; then echo "tests=passed" >> "$GITHUB_OUTPUT"; else echo "tests=failed" >> "$GITHUB_OUTPUT"; fi
+            tail -n 40 test.log > test-tail.log
+          else
+            echo "merge=conflicts" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U > conflicts.log
+            git merge --abort
+          fi
+
+      - name: Open or update the pull request
+        if: steps.state.outputs.behind == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE: ${{ steps.trial.outputs.merge }}
+          TESTS: ${{ steps.trial.outputs.tests }}
+        run: |
+          {
+            echo "Official Publii has new commits (upstream \`${UPSTREAM_SHA:0:7}\`)."
+            echo
+            echo "Before merging: check the core patches listed in FORK.md."
+            echo
+            if [ "$MERGE" = "conflicts" ]; then
+              echo "**Merge conflicts** in:"; echo; sed 's/^/- /' conflicts.log
+              echo; echo "Resolve locally: \`git merge origin/upstream\`."
+            else
+              echo "Trial merge: clean. Tests: **${TESTS}**."
+              echo; echo '<details><summary>Test output (tail)</summary>'; echo; echo '```'; cat test-tail.log; echo '```'; echo '</details>'
+            fi
+          } > body.md
+          number=$(gh pr list --base master --head upstream --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body-file body.md
+            gh pr comment "$number" --body "Updated to upstream \`${UPSTREAM_SHA:0:7}\` – merge: ${MERGE}, tests: ${TESTS:-n/a}."
+          else
+            gh pr create --base master --head upstream --title "Sync with official Publii (${UPSTREAM_SHA:0:7})" --body-file body.md
+          fi

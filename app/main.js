@@ -99,7 +99,10 @@ electronApp.on('ready', function () {
         isDevelopment: process.env.NODE_ENV !== 'production'
     });
     applicationMenu.install();
-    
+
+    // PUBLII-PLUS: extension registry + warning when the official Publii runs (see FORK.md)
+    require('./back-end/plus').init({ electronApp, appInstance, ipcMain, dialog });
+
     ipcMain.on('publii-set-spellchecker-language', (event, language) => {
         global.spellCheckerLanguage = new String(language).replace(/[^a-z\-_]/gmi, '');
     });
