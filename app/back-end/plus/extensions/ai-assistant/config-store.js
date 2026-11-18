@@ -7,6 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { PROTOCOLS } = require('./providers');
+const { createSecretStore: createGenericSecretStore } = require('../../lib/secret-store');
+
+function createSecretStore (options) {
+    return createGenericSecretStore({ ...options, service: KEYCHAIN_SERVICE });
+}
 
 const KEYCHAIN_SERVICE = 'publii-plus-ai';
 
@@ -89,90 +94,6 @@ function sanitizeProvider (input, existingIds = []) {
         temperature: toNumberOrNull(input.temperature, 0, 2),
         maxOutputTokens: toNumberOrNull(input.maxOutputTokens, 16, 200000),
         timeoutMs: (toNumberOrNull(input.timeoutSeconds, 5, 900) || 120) * 1000
-    };
-}
-
-function createSecretStore ({ passwordStorage, safeStorage, secretsFile }) {
-    const readFile = () => {
-        try {
-            return JSON.parse(fs.readFileSync(secretsFile, 'utf8'));
-        } catch (e) {
-            return {};
-        }
-    };
-
-    const writeFile = data => {
-        fs.mkdirSync(path.dirname(secretsFile), { recursive: true });
-        fs.writeFileSync(secretsFile, JSON.stringify(data, null, 2), { mode: 0o600 });
-    };
-
-    const canEncrypt = () => !!(safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable());
-
-    return {
-        async get (id) {
-            if (passwordStorage) {
-                try {
-                    const value = await passwordStorage.getPassword(KEYCHAIN_SERVICE, id);
-                    if (value) return value;
-                } catch (e) {
-                    // keychain unavailable – try the encrypted file
-                }
-            }
-
-            const stored = readFile()[id];
-
-            if (stored && canEncrypt()) {
-                try {
-                    return safeStorage.decryptString(Buffer.from(stored, 'base64'));
-                } catch (e) {
-                    return '';
-                }
-            }
-
-            return '';
-        },
-        async set (id, value) {
-            if (passwordStorage) {
-                try {
-                    await passwordStorage.setPassword(KEYCHAIN_SERVICE, id, value);
-                    const data = readFile();
-
-                    if (id in data) {
-                        delete data[id];
-                        writeFile(data);
-                    }
-
-                    return 'keychain';
-                } catch (e) {
-                    // fall back below
-                }
-            }
-
-            if (!canEncrypt()) {
-                throw new Error('Neither the system keychain nor encrypted storage is available – the API key cannot be stored safely.');
-            }
-
-            const data = readFile();
-            data[id] = safeStorage.encryptString(value).toString('base64');
-            writeFile(data);
-            return 'encrypted-file';
-        },
-        async remove (id) {
-            if (passwordStorage) {
-                try {
-                    await passwordStorage.deletePassword(KEYCHAIN_SERVICE, id);
-                } catch (e) {
-                    // not stored there
-                }
-            }
-
-            const data = readFile();
-
-            if (id in data) {
-                delete data[id];
-                writeFile(data);
-            }
-        }
     };
 }
 

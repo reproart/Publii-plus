@@ -26,6 +26,7 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 | `app/src/components/post-editor/Sidebar.vue` | `<plus-slot name="post-editor-sidebar" :context="$parent" />` перед «Other options» | панель AI Assistant в редакторе |
 | `app/src/components/AppSettings.vue` | `<plus-slot name="app-settings" />` после последней группы | настройки AI-провайдеров |
 | `app/src/components/ThemeSettings.vue` | `<plus-slot name="theme-settings" />` под заголовком | кнопка «Edit theme files» |
+| `app/src/components/AppPlugins.vue`, `AppThemes.vue` | `<plus-slot name="app-plugins" / "app-themes">` под заголовком | менеджер расширений |
 | `README.md` | заметка о форке в начале файла | ссылка на этот документ |
 | `.github/workflows/plus-*.yml` | новые файлы | CI, сборка Windows, синхронизация с upstream |
 
@@ -101,6 +102,7 @@ npm run prod
 | `post-editor-sidebar` | боковая панель редактора записи/страницы (все три редактора) | компонент редактора: `postData`, `$refs`, `itemType` |
 | `app-settings` | Settings приложения, после всех групп | — |
 | `theme-settings` | страница Theme сайта, под заголовком | — |
+| `app-plugins`, `app-themes` | страницы Plugins и Themes приложения | `'plugin'` / `'theme'` |
 
 ## AI Assistant (расширение `ai-assistant`)
 
@@ -146,4 +148,23 @@ npm run prod
 - **Preview site** — рендер предпросмотра Publii с изменениями.
 
 Общая утилита diff: `app/back-end/plus/lib/unified-diff.js` (используется и в интерфейсе).
+
+## Менеджер расширений (расширение `extensions-manager`)
+
+- **Где**: Plugins и Themes приложения → блок «Catalog & updates»: «Open catalog» / «Show updates» и «Install from link».
+- **Каталог**: плагины и темы из источников, у каждого — статус (Install / Update from vX / Installed), «Update all».
+  Перед установкой: размер и SHA-256 из каталога, распаковка безопасным распаковщиком Publii, проверка
+  (`plugin.json`/`config.json`, `main.js`, файлы `assets.front`, `minimumPubliiVersion`), запрет на замену плагина,
+  у которого открыты настройки. Установка атомарна (staging-папка), списки Publii обновляются без перезапуска.
+- **Установка по ссылке**: ссылка на `.zip` или на GitHub-репозиторий (`https://github.com/owner/repo[/tree/branch]`,
+  скачивается архив без REST API — без лимита запросов). Сначала проверка и показ имени/версии, затем выбор имени
+  папки (предлагается автоматически, например `publii-mermaid-support-plugin` → `mermaidSupport`; для обновлений
+  оставляйте то же имя).
+- **Источники** (вкладка Sources): GitHub-релиз (`owner/repo`, тег, по умолчанию `catalog`) или прямая ссылка на `catalog.json`.
+  По умолчанию — `reproart/publii_modified`, релиз `catalog` (его публикует workflow «Publish catalog»).
+  Настройки: `Documents/Publii/config/publii-plus-extensions.json`; токены — в связке ключей (`publii-plus-extensions`).
+- **Приватный репозиторий** (как `publii_modified`) требует токен: GitHub → Settings → Developer settings →
+  Fine-grained tokens → Generate: Repository access — только нужный репозиторий, Permissions → Contents: Read-only.
+  Вставить в Sources → Edit → Access token.
+- Для тестов: `PUBLII_PLUS_GITHUB_API` / `PUBLII_PLUS_GITHUB_WEB` подменяют адреса GitHub.
 

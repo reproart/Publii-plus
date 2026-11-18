@@ -35,4 +35,7 @@ AI Assistant: `app/back-end/plus/extensions/ai-assistant/` (providers, tasks, co
 Theme editor: `app/back-end/plus/extensions/theme-editor/` (overrides in `<site>/input/themes/<theme>-override`) +
 `app/src/plus/extensions/theme-editor/`. Shared: `app/back-end/plus/lib/unified-diff.js`, `app/src/plus/components/PlusCodeEditor.vue`.
 
+Extensions manager: `app/back-end/plus/extensions/extensions-manager/` (catalog = publii_modified release `catalog`,
+see its tools/catalog.js). Shared secrets: `app/back-end/plus/lib/secret-store.js`.
+
 Specs for Vue components follow the upstream pattern (vue-template-compiler + vm, render vnodes, no DOM).

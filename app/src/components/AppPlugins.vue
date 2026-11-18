@@ -23,6 +23,8 @@
                 </p-button>
             </p-header>
 
+            <plus-slot name="app-plugins" context="plugin" /><!-- PUBLII-PLUS -->
+
             <div ref="content">
                 <plugins-list
                     :installing="installingExtension"

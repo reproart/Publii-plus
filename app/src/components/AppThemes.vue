@@ -23,6 +23,8 @@
                 </p-button>
             </p-header>
 
+            <plus-slot name="app-themes" context="theme" /><!-- PUBLII-PLUS -->
+
             <div ref="content">
                 <themes-list
                     :installing="installingExtension"
