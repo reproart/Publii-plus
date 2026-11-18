@@ -44,3 +44,7 @@ Plugin workshop: `app/back-end/plus/extensions/plugin-workshop/` (copies with ba
 `config/publii-plus-workshop/`, check in a child process via `check-worker.js`, diff/zip export) +
 `app/src/plus/extensions/plugin-workshop/`. Hook log: `app/back-end/plus/hook-logger.js`, enabled by
 `PUBLII_PLUS_HOOK_LOG` (render workers inherit the main process env); hook names in `app/back-end/plus/lib/publii-hooks.js`.
+
+AI agent: `app/back-end/plus/extensions/ai-assistant/agent/` (loop with approvals/undo in `index.js`, tools in `tools.js`,
+targeted post updates on Publii's models in `publii-data.js`; tool calling = `chat()` in `providers/index.js`) +
+`app/src/plus/extensions/ai-agent/` (slot `site-sidebar`). Data specs use `node:sqlite` with `app/back-end/sql/1.0.0.sql`.

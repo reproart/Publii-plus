@@ -4,7 +4,8 @@
  */
 const path = require('path');
 const { createConfigStore, sanitizeProvider, PRESETS } = require('./config-store');
-const { PROTOCOLS, generateStructured, listModels } = require('./providers');
+const { PROTOCOLS, generateStructured, chat, listModels } = require('./providers');
+const { createAgent } = require('./agent');
 const { TASKS, LIMITS, themeStylesRule } = require('./tasks');
 const { isInsecureRemote } = require('./http');
 
@@ -182,6 +183,41 @@ module.exports = {
         ctx.handle('instructions:get', (event, siteName) => service.getInstructions(siteName));
         ctx.handle('instructions:save', (event, data) => service.saveInstructions(data));
         ctx.handle('run', (event, request) => service.run(request));
+
+        // AI agent (chat with tools over the current website)
+        const { createPubliiData } = require('./agent/publii-data');
+        const themeEditor = require('../theme-editor');
+        const { createUnifiedDiff } = require('../../lib/unified-diff');
+        const themes = themeEditor.createService({ getSitesDir: () => ctx.appInstance && ctx.appInstance.sitesDir });
+        const data = createPubliiData({ app: ctx.appInstance });
+        const agent = createAgent({
+            resolveProvider: id => store.resolve(id),
+            chat: options => chat(options),
+            getInstructions: site => store.getInstructions(site),
+            withInstructions,
+            makeContext: site => agentContext(site)
+        });
+
+        function agentContext (site) {
+            if (!/^[a-zA-Z0-9_.-]+$/.test(String(site || '')) || String(site).startsWith('.')) throw new Error('Invalid website.');
+
+            return {
+                site,
+                data,
+                theme: themes,
+                markdownToHtml,
+                createDiff: (oldText, newText, name) => createUnifiedDiff(oldText, newText, { oldName: 'a/' + name, newName: 'b/' + name })
+            };
+        }
+
+        ctx.handle('agent:start', (event, options) => agent.start(options || {}));
+        ctx.handle('agent:send', (event, sessionId, text, options) => agent.send(sessionId, text, options || {}));
+        ctx.handle('agent:resolve', (event, sessionId, decisions) => agent.resolve(sessionId, decisions || {}));
+        ctx.handle('agent:undo', (event, sessionId, changeId) => agent.undo(sessionId, changeId));
+        ctx.handle('agent:cancel', (event, sessionId) => agent.cancel(sessionId));
+        ctx.handle('agent:history', (event, sessionId) => agent.history(sessionId));
+        ctx.handle('agent:close', (event, sessionId) => agent.close(sessionId));
+        ctx.handle('agent:store-data', (event, site) => data.storeData(agentContext(site).site));
         ctx.handle('cancel', (event, requestId) => service.cancel(requestId));
     }
 };

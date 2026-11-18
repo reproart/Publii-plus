@@ -2,6 +2,7 @@
     <aside class="sidebar">
         <topbar-sites />
         <sidebar-menu />
+        <plus-slot name="site-sidebar" /><!-- PUBLII-PLUS -->
         <sidebar-sync-button />
     </aside>
 </template>

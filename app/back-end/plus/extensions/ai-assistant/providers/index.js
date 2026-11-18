@@ -71,6 +71,64 @@ const PROTOCOLS = {
 
             const usage = json.usage || {};
             return { text: parts.join(''), usage: { input: usage.input_tokens || 0, output: usage.output_tokens || 0 }, model: json.model };
+        },
+        /** Agent turn with tools. messages: neutral history, see toNeutral() in chat(). */
+        buildChat ({ config, system, messages, tools }) {
+            const input = [];
+
+            for (const m of messages) {
+                if (m.role === 'user') input.push({ role: 'user', content: m.text });
+                else if (m.role === 'assistant') {
+                    // replay the provider's own output items (keeps reasoning items with tool calls)
+                    if (m.raw && m.raw.protocol === 'openai-responses') input.push(...m.raw.items);
+                    else {
+                        if (m.text) input.push({ role: 'assistant', content: m.text });
+                        for (const c of m.toolCalls || []) input.push({ type: 'function_call', call_id: c.id, name: c.name, arguments: c.arguments });
+                    }
+                } else if (m.role === 'tool') input.push({ type: 'function_call_output', call_id: m.id, output: m.output });
+            }
+
+            const body = { model: config.model, instructions: system, input };
+
+            if (tools && tools.length) body.tools = tools.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters }));
+            if (typeof config.temperature === 'number') body.temperature = config.temperature;
+            if (config.maxOutputTokens) body.max_output_tokens = config.maxOutputTokens;
+
+            return { path: '/responses', body };
+        },
+        parseChat (json) {
+            const texts = [];
+            const toolCalls = [];
+            const items = [];
+
+            for (const item of json.output || []) {
+                if (item.type === 'message') {
+                    for (const content of item.content || []) {
+                        if (content.type === 'output_text') texts.push(content.text);
+                        if (content.type === 'refusal') texts.push('The model refused: ' + content.refusal);
+                    }
+                    items.push({ role: 'assistant', content: (item.content || []).filter(c => c.type === 'output_text').map(c => c.text).join('') });
+                } else if (item.type === 'function_call') {
+                    toolCalls.push({ id: item.call_id, name: item.name, arguments: item.arguments || '{}' });
+                    items.push({ type: 'function_call', call_id: item.call_id, name: item.name, arguments: item.arguments || '{}' });
+                } else if (item.type === 'reasoning') {
+                    items.push(item);
+                }
+            }
+
+            if (json.status === 'incomplete' && !toolCalls.length) {
+                const reason = json.incomplete_details && json.incomplete_details.reason;
+                texts.push(reason === 'max_output_tokens' ? '\n\n(The answer was cut off: max output tokens.)' : '\n\n(The answer is incomplete.)');
+            }
+
+            const usage = json.usage || {};
+            return {
+                text: texts.join(''),
+                toolCalls,
+                raw: { protocol: 'openai-responses', items },
+                usage: { input: usage.input_tokens || 0, output: usage.output_tokens || 0 },
+                model: json.model
+            };
         }
     },
 
@@ -114,6 +172,52 @@ const PROTOCOLS = {
 
             const usage = json.usage || {};
             return { text: String(content || ''), usage: { input: usage.prompt_tokens || 0, output: usage.completion_tokens || 0 }, model: json.model };
+        },
+        buildChat ({ config, system, messages, tools }) {
+            const out = [{ role: 'system', content: system }];
+
+            for (const m of messages) {
+                if (m.role === 'user') out.push({ role: 'user', content: m.text });
+                else if (m.role === 'assistant') {
+                    const msg = { role: 'assistant', content: m.text || null };
+
+                    if (m.toolCalls && m.toolCalls.length) {
+                        msg.tool_calls = m.toolCalls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments } }));
+                    }
+
+                    out.push(msg);
+                } else if (m.role === 'tool') out.push({ role: 'tool', tool_call_id: m.id, content: m.output });
+            }
+
+            const body = { model: config.model, messages: out };
+
+            if (tools && tools.length) body.tools = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+            if (typeof config.temperature === 'number') body.temperature = config.temperature;
+            if (config.maxOutputTokens) body.max_tokens = config.maxOutputTokens;
+
+            return { path: '/chat/completions', body };
+        },
+        parseChat (json) {
+            const choice = (json.choices || [])[0];
+
+            if (!choice || !choice.message) throw new ProviderHttpError('The provider returned no answer.');
+
+            let content = choice.message.content;
+
+            if (Array.isArray(content)) content = content.map(c => c.text || '').join('');
+
+            let text = String(content || '');
+
+            if (choice.message.refusal) text += 'The model refused: ' + choice.message.refusal;
+
+            const toolCalls = (choice.message.tool_calls || [])
+                .filter(c => c && c.function && c.function.name)
+                .map((c, i) => ({ id: c.id || `call_${Date.now()}_${i}`, name: c.function.name, arguments: typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(c.function.arguments || {}) }));
+
+            if (choice.finish_reason === 'length' && !toolCalls.length) text += '\n\n(The answer was cut off: max tokens.)';
+
+            const usage = json.usage || {};
+            return { text, toolCalls, usage: { input: usage.prompt_tokens || 0, output: usage.completion_tokens || 0 }, model: json.model };
         }
     }
 };
@@ -213,6 +317,30 @@ async function generateStructured ({ config, apiKey, system, user, schema, schem
     return { data, text: result.text, usage, model: result.model || config.model, mode };
 }
 
+/**
+ * One agent turn with tools. messages (protocol-neutral):
+ *   { role: 'user', text } | { role: 'assistant', text, toolCalls: [{ id, name, arguments }], raw? } | { role: 'tool', id, name, output }
+ * Returns { text, toolCalls, raw, usage, model }.
+ */
+async function chat ({ config, apiKey, system, messages, tools, signal, fetchImpl }) {
+    const protocol = PROTOCOLS[config.type];
+
+    if (!protocol || !protocol.buildChat) throw new Error(`Provider type "${config.type}" does not support tools.`);
+    if (!config.model) throw new Error('No model is set for this provider.');
+
+    const { path, body } = protocol.buildChat({ config, system, messages, tools });
+    const json = await requestJson({
+        url: normalizeBaseUrl(config.baseUrl) + path,
+        headers: authHeaders(config, apiKey),
+        body,
+        timeoutMs: config.timeoutMs || 120000,
+        signal,
+        fetchImpl
+    });
+
+    return protocol.parseChat(json);
+}
+
 /** GET {baseUrl}/models – supported by OpenAI and most compatible servers. */
 async function listModels ({ config, apiKey, signal, fetchImpl }) {
     const json = await requestJson({
@@ -228,4 +356,4 @@ async function listModels ({ config, apiKey, signal, fetchImpl }) {
     return list.map(m => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean).sort();
 }
 
-module.exports = { PROTOCOLS, generateStructured, listModels, authHeaders, normalizeBaseUrl };
+module.exports = { PROTOCOLS, generateStructured, chat, listModels, authHeaders, normalizeBaseUrl };
