@@ -265,4 +265,7 @@ class RendererPlugins {
     }
 }
 
+// PUBLII-PLUS: optional hook log for the plugin workshop (only when PUBLII_PLUS_HOOK_LOG is set, see FORK.md)
+if (process.env.PUBLII_PLUS_HOOK_LOG) require('../../plus/hook-logger.js').install(RendererPlugins);
+
 module.exports = RendererPlugins;

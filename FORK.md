@@ -26,7 +26,8 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 | `app/src/components/post-editor/Sidebar.vue` | `<plus-slot name="post-editor-sidebar" :context="$parent" />` перед «Other options» | панель AI Assistant в редакторе |
 | `app/src/components/AppSettings.vue` | `<plus-slot name="app-settings" />` после последней группы | настройки AI-провайдеров |
 | `app/src/components/ThemeSettings.vue` | `<plus-slot name="theme-settings" />` под заголовком | кнопка «Edit theme files» |
-| `app/src/components/AppPlugins.vue`, `AppThemes.vue` | `<plus-slot name="app-plugins" / "app-themes">` под заголовком | менеджер расширений |
+| `app/src/components/AppPlugins.vue`, `AppThemes.vue` | `<plus-slot name="app-plugins" / "app-themes">` под заголовком | менеджер расширений, мастерская плагинов |
+| `app/back-end/modules/render-html/renderer-plugins.js` | одна строка перед `module.exports`: если задана переменная `PUBLII_PLUS_HOOK_LOG`, подключается `plus/hook-logger.js` | журнал хуков мастерской плагинов (без переменной поведение не меняется) |
 | `README.md` | заметка о форке в начале файла | ссылка на этот документ |
 | `.github/workflows/plus-*.yml` | новые файлы | CI, сборка Windows, синхронизация с upstream |
 
@@ -168,3 +169,23 @@ npm run prod
   Вставить в Sources → Edit → Access token.
 - Для тестов: `PUBLII_PLUS_GITHUB_API` / `PUBLII_PLUS_GITHUB_WEB` подменяют адреса GitHub.
 
+
+## Мастерская плагинов (расширение `plugin-workshop`)
+
+- **Где**: Plugins приложения → блок «Plugin workshop» → «Open workshop».
+- **Своя копия**: «Copy a plugin» — выбрать установленный плагин и имя папки копии (например `mermaidMine`).
+  Копия появляется в списке плагинов как «… (my copy)» и включается для сайта как обычный плагин; оригинал не
+  меняется и обновляется из каталога. Снимок оригинала хранится в `Documents/Publii/config/publii-plus-workshop/<id>/base`.
+- **Новый плагин**: «New plugin» — имя папки, название, автор; создаётся рабочий шаблон (`plugin.json` + `main.js`).
+- **Редактор**: дерево файлов, правка с подсветкой, Ctrl/Cmd+S, «Compare with original», новые файлы
+  (например `front-assets/script.js`). Сохранение с ошибкой синтаксиса JS/JSON блокируется, ошибка показывается со строкой.
+- **Без перезапуска**: Publii рендерит сайт в отдельном процессе и каждый раз загружает `main.js` заново —
+  изменения применяются при следующем Preview/Sync. После правки `plugin.json` список плагинов обновляется сразу.
+- **Check plugin**: проверка манифеста и синтаксиса всех файлов, загрузка `main.js` в отдельном процессе
+  (тайм-аут 10 с), список зарегистрированных хуков и предупреждения о несуществующих именах хуков (например `postContent`).
+- **Export changes (.diff)**: единый diff копии против исходной версии (`<плагин>-<версия>-changes.diff`) — его можно
+  передать автору или применить к основной ветке плагина (`git apply`, путь `a/<файл>`). Переименование «(my copy)»
+  в diff не попадает. **Export .zip** — архив `<id>_<версия>.zip` в формате каталога.
+- **Журнал хуков**: включить «Record hook log», сделать Preview — для каждого плагина и хука видно число вызовов,
+  сколько раз модификатор изменил значение, время (всего/максимум) и ошибки. Работает для всех включённых плагинов
+  сайта. Журнал: `Documents/Publii/config/publii-plus-hook-log.json`; включение действует до перезапуска приложения.

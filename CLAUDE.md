@@ -39,3 +39,8 @@ Extensions manager: `app/back-end/plus/extensions/extensions-manager/` (catalog 
 see its tools/catalog.js). Shared secrets: `app/back-end/plus/lib/secret-store.js`.
 
 Specs for Vue components follow the upstream pattern (vue-template-compiler + vm, render vnodes, no DOM).
+
+Plugin workshop: `app/back-end/plus/extensions/plugin-workshop/` (copies with base snapshot in
+`config/publii-plus-workshop/`, check in a child process via `check-worker.js`, diff/zip export) +
+`app/src/plus/extensions/plugin-workshop/`. Hook log: `app/back-end/plus/hook-logger.js`, enabled by
+`PUBLII_PLUS_HOOK_LOG` (render workers inherit the main process env); hook names in `app/back-end/plus/lib/publii-hooks.js`.
