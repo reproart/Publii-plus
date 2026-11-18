@@ -25,6 +25,7 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 | `app/src/components/About.vue` | `<plus-slot name="about" />` | версия Publii Plus и список расширений |
 | `app/src/components/post-editor/Sidebar.vue` | `<plus-slot name="post-editor-sidebar" :context="$parent" />` перед «Other options» | панель AI Assistant в редакторе |
 | `app/src/components/AppSettings.vue` | `<plus-slot name="app-settings" />` после последней группы | настройки AI-провайдеров |
+| `app/src/components/ThemeSettings.vue` | `<plus-slot name="theme-settings" />` под заголовком | кнопка «Edit theme files» |
 | `README.md` | заметка о форке в начале файла | ссылка на этот документ |
 | `.github/workflows/plus-*.yml` | новые файлы | CI, сборка Windows, синхронизация с upstream |
 
@@ -99,6 +100,7 @@ npm run prod
 | `about` | экран About | — |
 | `post-editor-sidebar` | боковая панель редактора записи/страницы (все три редактора) | компонент редактора: `postData`, `$refs`, `itemType` |
 | `app-settings` | Settings приложения, после всех групп | — |
+| `theme-settings` | страница Theme сайта, под заголовком | — |
 
 ## AI Assistant (расширение `ai-assistant`)
 
@@ -126,3 +128,22 @@ npm run prod
   найденных стилей текущего сайта. Другого HTML в черновиках модель не использует, если его не разрешают инструкции.
 - **Ограничения**: блочный редактор — только SEO, теги и копирование черновика (вставка и переписывание недоступны).
 - **Приватность**: заголовок и текст записи отправляются выбранному провайдеру. Для полностью локальной работы — Ollama/LM Studio.
+
+## Редактор файлов темы (расширение `theme-editor`)
+
+- **Где**: Theme → «Edit theme files». Полноэкранный редактор: дерево текстовых файлов темы
+  (шаблоны и partials — первыми, лицензии шрифтов скрыты), фильтр, «Changed only», подсветка кода (CodeMirror).
+- **Как хранится**: правка никогда не меняет саму тему. Сохранение пишет файл в
+  `<сайт>/input/themes/<тема>-override/<тот же путь>` — Publii берёт его вместо оригинала при рендере
+  (шаблоны, partials, ассеты, `config.json`, JS темы), и обновление темы его не затирает.
+  Сохранение содержимого, равного оригиналу, удаляет копию. «Revert to original» удаляет копию.
+- **Новые файлы** (например, partial или CSS) создаются сразу в override.
+- **Проверка** на лету и перед сохранением: Handlebars и JSON (ошибка блокирует сохранение), JS (ES-модули —
+  только предупреждение), CSS (несбалансированные скобки — предупреждение). Клик по ошибке — переход к строке.
+- **Compare with original** — diff текущего (в т.ч. несохранённого) текста с оригиналом.
+- **Export changes (.diff)** — один unified diff всех изменённых и новых файлов темы, применимый `patch -p1`/`git apply`
+  к папке темы: удобно передать изменения автору темы.
+- **Preview site** — рендер предпросмотра Publii с изменениями.
+
+Общая утилита diff: `app/back-end/plus/lib/unified-diff.js` (используется и в интерфейсе).
+

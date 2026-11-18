@@ -24,6 +24,8 @@
                     defaultValue="full-site-preview" />
             </p-header>
 
+            <plus-slot name="theme-settings" /><!-- PUBLII-PLUS -->
+
             <fields-group :title="$t('settings.basicSettings')">
                 <field
                     id="name"

@@ -32,4 +32,7 @@ AI Assistant: `app/back-end/plus/extensions/ai-assistant/` (providers, tasks, co
 `app/src/plus/extensions/ai-assistant/` (AiPanel, AiSettings, editor-adapter). UI styles must use design tokens
 (`npm run audit:design-system`): `--space-*`, `--font-size-ui-*`, `--color-*`; root font-size is 10px.
 
+Theme editor: `app/back-end/plus/extensions/theme-editor/` (overrides in `<site>/input/themes/<theme>-override`) +
+`app/src/plus/extensions/theme-editor/`. Shared: `app/back-end/plus/lib/unified-diff.js`, `app/src/plus/components/PlusCodeEditor.vue`.
+
 Specs for Vue components follow the upstream pattern (vue-template-compiler + vm, render vnodes, no DOM).
