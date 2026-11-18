@@ -265,8 +265,8 @@
             <h3 class="plus-ai-subtitle">Instructions for AI</h3>
             <p class="plus-ai-intro">
                 Added to every AI request after the built-in rules: style, audience, words to avoid, and the typography
-                your theme supports (e.g. HTML elements or CSS classes such as <code>&lt;p class="msg msg--info"&gt;</code>).
-                The AI uses HTML in drafts only where these instructions allow it.
+                your theme supports beyond its editor styles. The editor styles declared by the theme (below) are passed
+                automatically; the AI uses HTML in drafts only for those styles and where these instructions allow it.
             </p>
 
             <field
@@ -291,10 +291,36 @@
                     class="plus-ai-textarea"
                     rows="5"
                     v-model="instructions.site"
-                    placeholder="e.g. The theme supports: <p class=&quot;msg msg--info&quot;> for notes, <p class=&quot;msg msg--warning&quot;> for warnings, <blockquote class=&quot;blockquote--quote&quot;> for quotes."></textarea>
+                    placeholder="e.g. Audience: photography beginners. End every post with a link to our newsletter. Use the theme's Warning box for safety notes."></textarea>
                 <small
                     slot="note"
                     class="note">Use it for things that depend on this website's theme or audience.</small>
+            </field>
+
+            <field
+                id="plus-ai-theme-styles"
+                label="Theme styles">
+                <label
+                    slot="field"
+                    class="plus-ai-check">
+                    <input
+                        id="plus-ai-theme-styles"
+                        type="checkbox"
+                        v-model="instructions.useThemeStyles">
+                    Tell the AI which formatting styles the website's theme provides
+                </label>
+                <small
+                    slot="note"
+                    class="note">
+                    <template v-if="themeStyles.length">
+                        {{ siteDisplayName }}: <span
+                            v-for="style in themeStyles"
+                            :key="style.tag + style.classes"
+                            class="plus-ai-style"
+                            :title="'<' + style.tag + ' class=&quot;' + style.classes + '&quot;>'">{{ style.label }}</span>
+                    </template>
+                    <template v-else>The theme of the current website declares no editor styles.</template>
+                </small>
             </field>
 
             <div class="plus-ai-form-buttons">
@@ -308,6 +334,7 @@
 
 <script>
 import { call, headersToText, textToHeaders } from './api';
+import { currentThemeStyles } from './theme-styles';
 
 export default {
     name: 'plus-ai-settings',
@@ -326,7 +353,7 @@ export default {
             saving: false,
             testing: false,
             formMessage: null,
-            instructions: { global: '', site: '' },
+            instructions: { global: '', site: '', useThemeStyles: true },
             savingInstructions: false
         };
     },
@@ -334,6 +361,9 @@ export default {
         siteName () {
             const site = this.$store.state.currentSite;
             return site && site.config && site.config.name && site.config.name !== '!' ? site.config.name : '';
+        },
+        themeStyles () {
+            return currentThemeStyles(this.$store);
         },
         siteDisplayName () {
             const config = this.$store.state.currentSite.config;
@@ -377,7 +407,7 @@ export default {
             this.savingInstructions = true;
 
             try {
-                this.instructions = await call(this, 'instructions:save', { global: this.instructions.global, siteName: this.siteName, site: this.instructions.site });
+                this.instructions = await call(this, 'instructions:save', { global: this.instructions.global, siteName: this.siteName, site: this.instructions.site, useThemeStyles: this.instructions.useThemeStyles });
                 this.$bus.$emit('message-display', { message: 'AI instructions saved.', type: 'success', lifeTime: 3 });
             } catch (e) {
                 this.$bus.$emit('message-display', { message: e.message, type: 'warning', lifeTime: 5 });
@@ -530,6 +560,19 @@ export default {
     border-top: 1px solid var(--color-border-subtle);
     margin-top: var(--space-6);
     padding-top: var(--space-4);
+}
+
+.plus-ai-check {
+    display: block;
+}
+
+.plus-ai-style {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-base);
+    display: inline-block;
+    font-style: normal;
+    margin: 0 var(--space-1) var(--space-1) 0;
+    padding: 0 var(--space-1);
 }
 
 .plus-ai-subtitle {

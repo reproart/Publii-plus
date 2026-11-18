@@ -18,7 +18,7 @@ const PRESETS = [
     { key: 'custom', name: 'Custom (OpenAI-compatible)', type: 'openai-chat', baseUrl: '', structuredOutput: 'json_schema', authHeader: 'Authorization', authPrefix: 'Bearer ' }
 ];
 
-const DEFAULT_CONFIG = { version: 1, defaultProviderId: '', providers: [], instructions: '', siteInstructions: {} };
+const DEFAULT_CONFIG = { version: 1, defaultProviderId: '', providers: [], instructions: '', siteInstructions: {}, useThemeStyles: true };
 
 const MAX_INSTRUCTIONS = 8000;
 
@@ -248,12 +248,14 @@ function createConfigStore ({ configDir, passwordStorage, safeStorage }) {
         getInstructions (siteName) {
             const config = load();
             const site = siteName && config.siteInstructions ? config.siteInstructions[siteName] || '' : '';
-            return { global: config.instructions || '', site };
+            return { global: config.instructions || '', site, useThemeStyles: config.useThemeStyles !== false };
         },
 
-        saveInstructions ({ global, siteName, site }) {
+        saveInstructions ({ global, siteName, site, useThemeStyles }) {
             const config = load();
             config.instructions = cleanInstructions(global);
+
+            if (typeof useThemeStyles === 'boolean') config.useThemeStyles = useThemeStyles;
             config.siteInstructions = config.siteInstructions && typeof config.siteInstructions === 'object' ? config.siteInstructions : {};
 
             if (siteName && /^[^\/\\]{1,200}$/.test(siteName)) {

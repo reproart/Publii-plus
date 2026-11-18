@@ -50,7 +50,7 @@ function draftRules (input) {
         briefLanguageRule(input.language),
         `Length: ${words}.`,
         input.tone ? `Tone: ${input.tone}.` : 'Tone: clear, friendly and professional.',
-        'markdown: the article body in Markdown. Use ## and ### headings, short paragraphs, lists and tables where useful. Do not repeat the title as a heading, no front matter. Use HTML only for elements or CSS classes that the website instructions explicitly allow.',
+        'markdown: the article body in Markdown. Use ## and ### headings, short paragraphs, lists and tables where useful. Do not repeat the title as a heading, no front matter. Use HTML only for the theme styles listed below or for elements the website instructions explicitly allow.',
         'title: a concise, specific title.',
         'Do not invent statistics, quotes or sources; when a fact needs checking, write it so the author can verify it.'
     ];
@@ -71,6 +71,30 @@ function tagRules (max) {
         'New tags: 1–3 words, same language and style as the existing tags (or as the post if there are none), no hashtags.',
         'mainTag: the single most relevant tag; it must be one of the returned tags.'
     ];
+}
+
+/** Prompt block describing the formatting styles declared by the website's theme. */
+function themeStylesRule (styles) {
+    if (!Array.isArray(styles) || !styles.length) return '';
+
+    const lines = [];
+
+    for (const style of styles.slice(0, 40)) {
+        const tag = String(style.tag || '').split(',')[0].trim().toLowerCase();
+        const classes = String(style.classes || '').split(/\s+/).filter(c => /^[A-Za-z0-9_-]+$/.test(c)).join(' ');
+        const label = String(style.label || '').replace(/[\r\n]+/g, ' ').slice(0, 60);
+
+        if (!/^[a-z][a-z0-9]*$/.test(tag) || !classes) continue;
+
+        lines.push(`- ${label || classes}: <${tag} class="${classes}">…</${tag}>`);
+    }
+
+    if (!lines.length) return '';
+
+    return [
+        'Formatting styles provided by the website\'s theme. Use them where they really fit the content (for example a tip, a warning or a highlighted fact), not decoratively. Write such elements as raw HTML on their own lines; inside them use HTML, not Markdown. Do not invent other CSS classes.',
+        ...lines
+    ].join('\n');
 }
 
 function draftUserBlock (input) {
@@ -278,4 +302,4 @@ const TASKS = {
     }
 };
 
-module.exports = { TASKS, LIMITS, toPlainText, fitLength };
+module.exports = { TASKS, LIMITS, toPlainText, fitLength, themeStylesRule };

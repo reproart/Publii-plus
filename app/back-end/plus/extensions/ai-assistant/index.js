@@ -5,13 +5,15 @@
 const path = require('path');
 const { createConfigStore, sanitizeProvider, PRESETS } = require('./config-store');
 const { PROTOCOLS, generateStructured, listModels } = require('./providers');
-const { TASKS, LIMITS } = require('./tasks');
+const { TASKS, LIMITS, themeStylesRule } = require('./tasks');
 const { isInsecureRemote } = require('./http');
 
 function markdownToHtml (markdown) {
     const { marked } = require('marked');
     return marked.parse(String(markdown || ''), { mangle: false, headerIds: false });
 }
+
+const THEME_STYLE_TASKS = ['draft', 'post', 'rewrite'];
 
 /** Append the website owner's instructions; they refine but do not replace the task rules. */
 function withInstructions (system, instructions) {
@@ -59,7 +61,17 @@ function createService ({ store, fetchImpl, createSlug = null }) {
 
         try {
             const built = definition.build(input);
-            const system = task === 'ping' ? built.system : withInstructions(built.system, store.getInstructions ? store.getInstructions(input.siteName) : null);
+            const instructions = store.getInstructions ? store.getInstructions(input.siteName) : null;
+            let system = built.system;
+
+            // Theme styles matter only where the AI writes content
+            if (THEME_STYLE_TASKS.includes(task) && (!instructions || instructions.useThemeStyles !== false)) {
+                const rule = themeStylesRule(input.themeStyles);
+
+                if (rule) system += '\n\n' + rule;
+            }
+
+            if (task !== 'ping') system = withInstructions(system, instructions);
             const user = built.user;
             const result = await generateStructured({
                 config: provider,

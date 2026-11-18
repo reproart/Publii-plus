@@ -304,16 +304,52 @@ describe('Publii Plus AI: tasks and service', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plus-ai-instr-'));
         const store = createConfigStore({ configDir: dir });
 
-        assert.deepEqual(store.getInstructions('blog'), { global: '', site: '' });
+        assert.deepEqual(store.getInstructions('blog'), { global: '', site: '', useThemeStyles: true });
         store.saveInstructions({ global: '  Be concise.  ', siteName: 'blog', site: 'Theme supports .msg boxes' });
-        assert.deepEqual(store.getInstructions('blog'), { global: 'Be concise.', site: 'Theme supports .msg boxes' });
-        assert.deepEqual(store.getInstructions('other'), { global: 'Be concise.', site: '' });
+        assert.deepEqual(store.getInstructions('blog'), { global: 'Be concise.', site: 'Theme supports .msg boxes', useThemeStyles: true });
+        store.saveInstructions({ global: 'Be concise.', siteName: 'blog', site: 'Theme supports .msg boxes', useThemeStyles: false });
+        assert.equal(store.getInstructions('blog').useThemeStyles, false);
+        assert.deepEqual(store.getInstructions('other'), { global: 'Be concise.', site: '', useThemeStyles: false });
 
         store.saveInstructions({ global: 'Be concise.', siteName: 'blog', site: '' });
         assert.equal(store.getInstructions('blog').site, '', 'empty site instructions are removed');
 
         assert.equal(extension.withInstructions('SYS', { global: '', site: '' }), 'SYS');
         assert.match(extension.withInstructions('SYS', { global: 'G', site: 'S' }), /^SYS\n\nInstructions from the website owner .*:\nG\n\nS$/);
+    });
+
+    it('theme styles: sanitized prompt block, only for writing tasks, can be switched off', async () => {
+        const { themeStylesRule } = require('../tasks');
+        const rule = themeStylesRule([
+            { label: 'Info', tag: 'p', classes: 'msg msg--info' },
+            { label: 'Evil', tag: 'p onclick=x', classes: 'a' },
+            { label: 'Table', tag: 'table, thead', classes: 'table-striped "x' }
+        ]);
+
+        assert.match(rule, /^Formatting styles provided by the website's theme/);
+        assert.match(rule, /- Info: <p class="msg msg--info">…<\/p>/);
+        assert.match(rule, /- Table: <table class="table-striped">…<\/table>/);
+        assert.doesNotMatch(rule, /Evil|onclick/);
+        assert.equal(themeStylesRule([]), '');
+
+        const styles = [{ label: 'Info', tag: 'p', classes: 'msg msg--info' }];
+        let useThemeStyles = true;
+        const srv = await startServer((req, body) => chatReply(JSON.stringify({ text: 'x', title: 'T', markdown: 'M', metaTitle: 'a', metaDescription: 'b', slug: 'c', tags: [], mainTag: '' })));
+        const store = { resolve: async () => ({ provider: cfg(srv.url), apiKey: '' }), getInstructions: () => ({ global: '', site: '', useThemeStyles }) };
+
+        try {
+            const service = extension.createService({ store });
+            await service.run({ task: 'post', input: { brief: 'b', themeStyles: styles } });
+            await service.run({ task: 'rewrite', input: { text: 't', themeStyles: styles } });
+            await service.run({ task: 'seo', input: { text: 't', themeStyles: styles } });
+            useThemeStyles = false;
+            await service.run({ task: 'draft', input: { brief: 'b', themeStyles: styles } });
+
+            const has = i => /msg msg--info/.test(srv.requests[i].body.messages[0].content);
+            assert.deepEqual([has(0), has(1), has(2), has(3)], [true, true, false, false]);
+        } finally {
+            await srv.close();
+        }
     });
 
     it('extension registers its IPC channels', () => {

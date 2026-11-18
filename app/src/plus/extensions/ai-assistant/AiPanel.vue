@@ -270,6 +270,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { call, newRequestId } from './api';
 import { createEditorAdapter, mergeTags } from './editor-adapter';
+import { currentThemeStyles } from './theme-styles';
 
 export default {
     name: 'plus-ai-panel',
@@ -361,7 +362,8 @@ export default {
 
             try {
                 const siteName = this.site.config ? this.site.config.name : '';
-                const out = await call(this, 'run', { task, input: { siteName, ...input }, providerId: this.providerId, requestId: this.requestId });
+                const themeStyles = currentThemeStyles(this.$store);
+                const out = await call(this, 'run', { task, input: { siteName, themeStyles, ...input }, providerId: this.providerId, requestId: this.requestId });
                 this.lastUsage = `${out.provider} · ${out.model} · ${out.usage.input}+${out.usage.output} tokens · ${(out.ms / 1000).toFixed(1)} s`;
                 return out.result;
             } catch (e) {
