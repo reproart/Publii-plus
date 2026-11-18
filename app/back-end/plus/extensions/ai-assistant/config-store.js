@@ -18,7 +18,13 @@ const PRESETS = [
     { key: 'custom', name: 'Custom (OpenAI-compatible)', type: 'openai-chat', baseUrl: '', structuredOutput: 'json_schema', authHeader: 'Authorization', authPrefix: 'Bearer ' }
 ];
 
-const DEFAULT_CONFIG = { version: 1, defaultProviderId: '', providers: [] };
+const DEFAULT_CONFIG = { version: 1, defaultProviderId: '', providers: [], instructions: '', siteInstructions: {} };
+
+const MAX_INSTRUCTIONS = 8000;
+
+function cleanInstructions (text) {
+    return String(text || '').replace(/\r\n/g, '\n').trim().slice(0, MAX_INSTRUCTIONS);
+}
 
 function toNumberOrNull (value, min, max) {
     if (value === '' || value === null || value === undefined) return null;
@@ -236,6 +242,29 @@ function createConfigStore ({ configDir, passwordStorage, safeStorage }) {
 
             save(config);
             await secrets.remove(id);
+        },
+
+        /** Custom instructions added to every request: global and per website (key = site folder name). */
+        getInstructions (siteName) {
+            const config = load();
+            const site = siteName && config.siteInstructions ? config.siteInstructions[siteName] || '' : '';
+            return { global: config.instructions || '', site };
+        },
+
+        saveInstructions ({ global, siteName, site }) {
+            const config = load();
+            config.instructions = cleanInstructions(global);
+            config.siteInstructions = config.siteInstructions && typeof config.siteInstructions === 'object' ? config.siteInstructions : {};
+
+            if (siteName && /^[^\/\\]{1,200}$/.test(siteName)) {
+                const value = cleanInstructions(site);
+
+                if (value) config.siteInstructions[siteName] = value;
+                else delete config.siteInstructions[siteName];
+            }
+
+            save(config);
+            return this.getInstructions(siteName);
         },
 
         setDefault (id) {

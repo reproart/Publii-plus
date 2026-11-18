@@ -269,11 +269,58 @@ describe('Publii Plus AI: tasks and service', () => {
         }
     });
 
+    it('complete post: title, content, SEO and tags from one request, in the language of the brief', async () => {
+        const reply = {
+            title: 'Тестовый пост', markdown: '## Раздел\n\nТекст <p class="msg msg--info">Note</p>',
+            metaTitle: 'Тестовый пост', metaDescription: 'Описание', slug: 'Тестовый пост', tags: [{ name: 'publii' }, { name: 'Новое' }], mainTag: 'Новое'
+        };
+        const srv = await startServer(() => chatReply(JSON.stringify(reply)));
+        const store = {
+            resolve: async () => ({ provider: cfg(srv.url, { name: 'Local' }), apiKey: '' }),
+            getInstructions: site => ({ global: 'Use British spelling.', site: site === 'blog' ? 'Notes: <p class="msg msg--info">.' : '' })
+        };
+
+        try {
+            const service = extension.createService({ store, createSlug: require('../../../../helpers/slug.js') });
+            const out = await service.run({ task: 'post', input: { brief: 'Давай сделаем тестовый пост', language: 'en', existingTags: ['Publii'], siteName: 'blog' } });
+            const system = srv.requests[0].body.messages[0].content;
+
+            assert.equal(out.result.title, 'Тестовый пост');
+            assert.match(out.result.html, /<h2>Раздел<\/h2>/);
+            assert.match(out.result.html, /<p class="msg msg--info">Note<\/p>/, 'inline HTML allowed by instructions survives');
+            assert.deepEqual(out.result.seo, { metaTitle: 'Тестовый пост', metaDescription: 'Описание', slug: 'testovyy-post' });
+            assert.deepEqual(out.result.tags, [{ name: 'Publii', isNew: false }, { name: 'Новое', isNew: true }]);
+            assert.equal(out.result.mainTag, 'Новое');
+
+            assert.match(system, /same language as the brief from the author \(if the language of the brief is unclear, use the language with code "en"\)/);
+            assert.match(system, /Instructions from the website owner[\s\S]*Use British spelling\.\n\nNotes: <p class="msg msg--info">\./);
+            assert.match(srv.requests[0].body.messages[1].content, /Existing tags of the website \(JSON\): \["Publii"\]/);
+        } finally {
+            await srv.close();
+        }
+    });
+
+    it('instructions are stored globally and per website, and skipped for connection tests', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plus-ai-instr-'));
+        const store = createConfigStore({ configDir: dir });
+
+        assert.deepEqual(store.getInstructions('blog'), { global: '', site: '' });
+        store.saveInstructions({ global: '  Be concise.  ', siteName: 'blog', site: 'Theme supports .msg boxes' });
+        assert.deepEqual(store.getInstructions('blog'), { global: 'Be concise.', site: 'Theme supports .msg boxes' });
+        assert.deepEqual(store.getInstructions('other'), { global: 'Be concise.', site: '' });
+
+        store.saveInstructions({ global: 'Be concise.', siteName: 'blog', site: '' });
+        assert.equal(store.getInstructions('blog').site, '', 'empty site instructions are removed');
+
+        assert.equal(extension.withInstructions('SYS', { global: '', site: '' }), 'SYS');
+        assert.match(extension.withInstructions('SYS', { global: 'G', site: 'S' }), /^SYS\n\nInstructions from the website owner .*:\nG\n\nS$/);
+    });
+
     it('extension registers its IPC channels', () => {
         const channels = [];
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plus-ai-reg-'));
         extension.register({ paths: { appDir: dir }, handle: name => channels.push(name) });
 
-        assert.deepEqual(channels.sort(), ['cancel', 'presets', 'providers:list', 'providers:models', 'providers:remove', 'providers:save', 'providers:set-default', 'providers:test', 'run'].sort());
+        assert.deepEqual(channels.sort(), ['cancel', 'instructions:get', 'instructions:save', 'presets', 'providers:list', 'providers:models', 'providers:remove', 'providers:save', 'providers:set-default', 'providers:test', 'run'].sort());
     });
 });

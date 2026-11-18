@@ -13,6 +13,19 @@ function markdownToHtml (markdown) {
     return marked.parse(String(markdown || ''), { mangle: false, headerIds: false });
 }
 
+/** Append the website owner's instructions; they refine but do not replace the task rules. */
+function withInstructions (system, instructions) {
+    if (!instructions) return system;
+
+    const parts = [];
+
+    if (instructions.global) parts.push(instructions.global);
+    if (instructions.site) parts.push(instructions.site);
+    if (!parts.length) return system;
+
+    return system + '\n\nInstructions from the website owner (follow them unless they contradict the required JSON format or length limits):\n' + parts.join('\n\n');
+}
+
 function createService ({ store, fetchImpl, createSlug = null }) {
     const running = new Map();
 
@@ -45,7 +58,9 @@ function createService ({ store, fetchImpl, createSlug = null }) {
         const started = Date.now();
 
         try {
-            const { system, user } = definition.build(input);
+            const built = definition.build(input);
+            const system = task === 'ping' ? built.system : withInstructions(built.system, store.getInstructions ? store.getInstructions(input.siteName) : null);
+            const user = built.user;
             const result = await generateStructured({
                 config: provider,
                 apiKey,
@@ -93,6 +108,12 @@ function createService ({ store, fetchImpl, createSlug = null }) {
             store.setDefault(id);
             return true;
         },
+        getInstructions (siteName) {
+            return store.getInstructions(siteName);
+        },
+        saveInstructions (data) {
+            return store.saveInstructions(data || {});
+        },
         async models (draft) {
             const { provider, apiKey } = await resolveDraft(draft);
             return listModels({ config: provider, apiKey, fetchImpl });
@@ -117,6 +138,7 @@ function createService ({ store, fetchImpl, createSlug = null }) {
 
 module.exports = {
     id: 'ai-assistant',
+    withInstructions,
     name: 'AI Assistant',
     createService,
 
@@ -145,6 +167,8 @@ module.exports = {
         ctx.handle('providers:set-default', (event, id) => service.setDefault(id));
         ctx.handle('providers:models', (event, draft) => service.models(draft));
         ctx.handle('providers:test', (event, draft) => service.test(draft));
+        ctx.handle('instructions:get', (event, siteName) => service.getInstructions(siteName));
+        ctx.handle('instructions:save', (event, data) => service.saveInstructions(data));
         ctx.handle('run', (event, request) => service.run(request));
         ctx.handle('cancel', (event, requestId) => service.cancel(requestId));
     }

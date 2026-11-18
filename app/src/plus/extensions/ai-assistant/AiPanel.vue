@@ -115,7 +115,7 @@
                             </label>
                             <p-button
                                 appearance="outline"
-                                :onClick="applyTags">Add selected tags</p-button>
+                                :onClick="() => applyTags()">Add selected tags</p-button>
                         </div>
                     </div>
 
@@ -136,41 +136,71 @@
                                 type="text"
                                 placeholder="Tone (optional)">
                         </div>
+                        <label class="plus-ai-check">
+                            <input
+                                type="checkbox"
+                                v-model="fullPost">
+                            Also create title, SEO fields and tags
+                        </label>
                         <p-button
-                            :loading="busy === 'draft'"
+                            :loading="busy === 'draft' || busy === 'post'"
                             :disabled="!!busy || !brief.trim()"
-                            :onClick="runDraft">Write draft</p-button>
+                            :onClick="runDraft">{{ fullPost ? 'Write post' : 'Write draft' }}</p-button>
 
                         <div
                             v-if="draft"
                             class="plus-ai-result">
                             <strong>{{ draft.title }}</strong>
+
+                            <dl
+                                v-if="draft.seo"
+                                class="plus-ai-summary">
+                                <dt>Meta title</dt>
+                                <dd>{{ draft.seo.metaTitle }} <span class="plus-ai-muted">({{ draft.seo.metaTitle.length }}/70)</span></dd>
+                                <dt>Meta description</dt>
+                                <dd>{{ draft.seo.metaDescription }} <span class="plus-ai-muted">({{ draft.seo.metaDescription.length }}/160)</span></dd>
+                                <dt>Slug</dt>
+                                <dd>{{ draft.seo.slug }}</dd>
+                                <dt>Tags</dt>
+                                <dd>
+                                    <span
+                                        v-for="tag in draft.tags"
+                                        :key="tag.name"
+                                        class="plus-ai-chip">{{ tag.name }}<span
+                                            v-if="tag.isNew"
+                                            class="plus-ai-new">new</span></span>
+                                </dd>
+                            </dl>
+
                             <div
                                 class="plus-ai-preview"
                                 v-html="draftPreview"></div>
-                            <div class="plus-ai-row-buttons">
-                                <template v-if="adapter.canInsert">
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="insertDraft(false)">Insert at cursor</button>
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="insertDraft(true)">Replace content</button>
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="useTitle">Use title</button>
-                                </template>
-                                <button
-                                    type="button"
-                                    class="plus-ai-link"
-                                    @click="copy(draft.markdown)">Copy Markdown</button>
+
+                            <div class="plus-ai-buttons">
+                                <p-button
+                                    v-if="draft.seo"
+                                    :onClick="applyEverything">Apply everything</p-button>
+                                <p-button
+                                    v-if="adapter.canInsert"
+                                    :appearance="draft.seo ? 'outline' : 'default'"
+                                    :onClick="() => insertDraft(true)">Replace content</p-button>
+                                <p-button
+                                    v-if="adapter.canInsert"
+                                    appearance="outline"
+                                    :onClick="() => insertDraft(false)">Insert at cursor</p-button>
+                                <p-button
+                                    appearance="outline"
+                                    :onClick="useTitle">Use title</p-button>
+                                <p-button
+                                    appearance="outline"
+                                    :onClick="() => copy(draft.markdown)">Copy Markdown</p-button>
                             </div>
                             <p
+                                v-if="draft.seo"
+                                class="plus-ai-muted">"Apply everything" replaces the content and fills the title, SEO fields and tags.</p>
+                            <p
                                 v-if="!adapter.canInsert"
-                                class="plus-ai-muted">The block editor does not support inserting – copy the text instead.</p>
+                                class="plus-ai-muted">The block editor does not support inserting – "Apply everything" fills the title, SEO and tags; copy the text with "Copy Markdown".</p>
                         </div>
                     </div>
 
@@ -202,15 +232,11 @@
                                 <div
                                     class="plus-ai-preview"
                                     v-html="rewritePreview"></div>
-                                <div class="plus-ai-row-buttons">
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="applyRewrite">Replace selection</button>
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="rewrite = null">Discard</button>
+                                <div class="plus-ai-buttons">
+                                    <p-button :onClick="applyRewrite">Replace selection</p-button>
+                                    <p-button
+                                        appearance="outline"
+                                        :onClick="() => { rewrite = null; }">Discard</p-button>
                                 </div>
                             </div>
                         </template>
@@ -269,6 +295,7 @@ export default {
             tagSuggestions: null,
             brief: '',
             draftLength: 'medium',
+            fullPost: true,
             tone: '',
             draft: null,
             rewriteAction: 'improve',
@@ -333,7 +360,8 @@ export default {
             this.requestId = newRequestId();
 
             try {
-                const out = await call(this, 'run', { task, input, providerId: this.providerId, requestId: this.requestId });
+                const siteName = this.site.config ? this.site.config.name : '';
+                const out = await call(this, 'run', { task, input: { siteName, ...input }, providerId: this.providerId, requestId: this.requestId });
                 this.lastUsage = `${out.provider} · ${out.model} · ${out.usage.input}+${out.usage.output} tokens · ${(out.ms / 1000).toFixed(1)} s`;
                 return out.result;
             } catch (e) {
@@ -351,24 +379,24 @@ export default {
             return { title: this.postData.title, text: this.adapter.getText() };
         },
         async runSeo () {
-            const result = await this.run('seo', { ...this.baseInput(), siteName: this.site.config ? this.site.config.displayName : '' });
+            const result = await this.run('seo', { ...this.baseInput(), websiteName: this.site.config ? this.site.config.displayName : '' });
 
             if (result) this.seo = result;
         },
-        applySeo (key) {
+        applySeo (key, values = this.seo, quiet = false) {
             const keys = key ? [key] : ['metaTitle', 'metaDescription', 'slug'];
 
             for (const k of keys) {
-                if (!this.seo[k]) continue;
+                if (!values[k]) continue;
 
-                this.postData[k] = this.seo[k];
+                this.postData[k] = values[k];
 
                 if (k === 'slug' && 'postSlugEdited' in this.context) {
                     this.context.postSlugEdited = true;
                 }
             }
 
-            this.$bus.$emit('message-display', { message: 'SEO fields updated – remember to save the post.', type: 'success', lifeTime: 3 });
+            if (!quiet) this.$bus.$emit('message-display', { message: 'SEO fields updated – remember to save the post.', type: 'success', lifeTime: 3 });
         },
         async runTags () {
             const existingTags = (this.site.tags || []).map(t => t.name);
@@ -380,29 +408,48 @@ export default {
                 this.tagSuggestions = result;
             }
         },
-        applyTags () {
-            const selected = this.tagSuggestions.tags.filter(t => t.selected).map(t => t.name);
-            this.postData.tags = mergeTags(this.postData.tags, selected);
+        applyTags (suggestions = this.tagSuggestions, onlySelected = true, quiet = false) {
+            const names = suggestions.tags.filter(t => !onlySelected || t.selected).map(t => t.name);
+            this.postData.tags = mergeTags(this.postData.tags, names);
 
-            const main = (this.site.tags || []).find(t => t.name === this.tagSuggestions.mainTag);
+            const main = (this.site.tags || []).find(t => t.name === suggestions.mainTag);
 
             if (main && !this.postData.mainTag && this.context.itemType !== 'page') {
                 this.postData.mainTag = main.id;
             }
 
-            this.$bus.$emit('message-display', { message: `${selected.length} tag(s) added.`, type: 'success', lifeTime: 3 });
+            if (!quiet) this.$bus.$emit('message-display', { message: `${names.length} tag(s) added.`, type: 'success', lifeTime: 3 });
         },
         async runDraft () {
-            const result = await this.run('draft', {
+            const task = this.fullPost ? 'post' : 'draft';
+            const result = await this.run(task, {
                 brief: this.brief,
                 title: this.postData.title,
                 text: this.adapter.getText(),
                 length: this.draftLength,
                 tone: this.tone,
-                language: this.site.config ? this.site.config.language : ''
+                language: this.site.config ? this.site.config.language : '',
+                existingTags: (this.site.tags || []).map(t => t.name)
             });
 
             if (result) this.draft = result;
+        },
+        applyEverything () {
+            const d = this.draft;
+
+            if (this.adapter.canInsert) {
+                const value = this.adapter.format === 'html' ? DOMPurify.sanitize(d.html) : d.markdown;
+
+                if (!this.adapter.replaceAll(value)) {
+                    this.error = 'The editor is not ready.';
+                    return;
+                }
+            }
+
+            this.useTitle();
+            this.applySeo(null, d.seo, true);
+            this.applyTags({ tags: d.tags, mainTag: d.mainTag }, false, true);
+            this.$bus.$emit('message-display', { message: 'Content, title, SEO fields and tags updated – remember to save the post.', type: 'success', lifeTime: 4 });
         },
         insertDraft (replace) {
             const value = this.adapter.format === 'html' ? DOMPurify.sanitize(this.draft.html) : this.draft.markdown;
@@ -546,6 +593,41 @@ export default {
     border-radius: var(--radius-base);
     font-size: var(--font-size-ui-xs);
     padding: 0 4px;
+}
+
+.plus-ai-check {
+    display: block;
+    margin-bottom: var(--space-2);
+}
+
+.plus-ai-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: var(--space-2) 0;
+}
+
+.plus-ai-summary {
+    font-size: var(--font-size-ui-sm);
+    margin: var(--space-2) 0;
+}
+
+.plus-ai-summary dt {
+    font-weight: var(--font-weight-semibold);
+    margin-top: var(--space-2);
+}
+
+.plus-ai-summary dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.plus-ai-chip {
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-base);
+    display: inline-block;
+    margin: 0 var(--space-1) var(--space-1) 0;
+    padding: 0 var(--space-1);
 }
 
 .plus-ai-inline {

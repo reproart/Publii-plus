@@ -261,6 +261,48 @@
                     :onClick="cancel">Cancel</p-button>
             </div>
         </div>
+        <div class="plus-ai-instructions">
+            <h3 class="plus-ai-subtitle">Instructions for AI</h3>
+            <p class="plus-ai-intro">
+                Added to every AI request after the built-in rules: style, audience, words to avoid, and the typography
+                your theme supports (e.g. HTML elements or CSS classes such as <code>&lt;p class="msg msg--info"&gt;</code>).
+                The AI uses HTML in drafts only where these instructions allow it.
+            </p>
+
+            <field
+                id="plus-ai-instructions-global"
+                label="For all websites">
+                <textarea
+                    slot="field"
+                    id="plus-ai-instructions-global"
+                    class="plus-ai-textarea"
+                    rows="5"
+                    v-model="instructions.global"
+                    placeholder="e.g. Write for beginners. Short paragraphs. No clichés like &quot;in today's fast-paced world&quot;."></textarea>
+            </field>
+
+            <field
+                v-if="siteName"
+                id="plus-ai-instructions-site"
+                :label="'Only for ' + siteDisplayName">
+                <textarea
+                    slot="field"
+                    id="plus-ai-instructions-site"
+                    class="plus-ai-textarea"
+                    rows="5"
+                    v-model="instructions.site"
+                    placeholder="e.g. The theme supports: <p class=&quot;msg msg--info&quot;> for notes, <p class=&quot;msg msg--warning&quot;> for warnings, <blockquote class=&quot;blockquote--quote&quot;> for quotes."></textarea>
+                <small
+                    slot="note"
+                    class="note">Use it for things that depend on this website's theme or audience.</small>
+            </field>
+
+            <div class="plus-ai-form-buttons">
+                <p-button
+                    :loading="savingInstructions"
+                    :onClick="saveInstructions">Save instructions</p-button>
+            </div>
+        </div>
     </fields-group>
 </template>
 
@@ -283,10 +325,20 @@ export default {
             loadingModels: false,
             saving: false,
             testing: false,
-            formMessage: null
+            formMessage: null,
+            instructions: { global: '', site: '' },
+            savingInstructions: false
         };
     },
     computed: {
+        siteName () {
+            const site = this.$store.state.currentSite;
+            return site && site.config && site.config.name && site.config.name !== '!' ? site.config.name : '';
+        },
+        siteDisplayName () {
+            const config = this.$store.state.currentSite.config;
+            return config.displayName || config.name;
+        },
         presetItems () {
             return this.presets.map(p => ({ value: p.key, label: p.name }));
         },
@@ -315,11 +367,24 @@ export default {
             this.presets = meta.presets;
             this.protocols = meta.protocols;
             await this.refresh();
+            this.instructions = await call(this, 'instructions:get', this.siteName);
         } catch (e) {
             this.loadError = e.message;
         }
     },
     methods: {
+        async saveInstructions () {
+            this.savingInstructions = true;
+
+            try {
+                this.instructions = await call(this, 'instructions:save', { global: this.instructions.global, siteName: this.siteName, site: this.instructions.site });
+                this.$bus.$emit('message-display', { message: 'AI instructions saved.', type: 'success', lifeTime: 3 });
+            } catch (e) {
+                this.$bus.$emit('message-display', { message: e.message, type: 'warning', lifeTime: 5 });
+            } finally {
+                this.savingInstructions = false;
+            }
+        },
         async refresh () {
             const data = await call(this, 'providers:list');
             this.providers = data.providers;
@@ -461,6 +526,18 @@ export default {
 </script>
 
 <style>
+.plus-ai-instructions {
+    border-top: 1px solid var(--color-border-subtle);
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+}
+
+.plus-ai-subtitle {
+    font-size: var(--font-size-ui-md);
+    font-weight: var(--font-weight-semibold);
+    margin: 0 0 var(--space-2);
+}
+
 .plus-ai-intro {
     margin-top: 0;
 }
