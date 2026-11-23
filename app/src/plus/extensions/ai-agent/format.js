@@ -1,20 +1,23 @@
 /**
- * Safe, minimal formatting of the agent's markdown answers: HTML is escaped first,
- * then **bold**, `code`, [links] as plain text, list bullets and line breaks.
+ * Agent answers are markdown (tables, lists, headings, code). Rendering: marked -> DOMPurify.
+ * The sanitizer gets a strict list: no images, frames, forms or styles (nothing loads from the network),
+ * links only with http(s)/mailto – the chat opens them in the system browser.
  */
 export function escapeHtml (text) {
     return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function formatAnswer (text) {
-    return escapeHtml(text)
-        .replace(/```[a-z]*\n([\s\S]*?)```/g, (m, code) => `<pre>${code}</pre>`)
-        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/^#{1,6} (.+)$/gm, '<strong>$1</strong>')
-        .replace(/^\s*[-*] /gm, '• ')
-        .replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, '$1 ($2)')
-        .replace(/\n/g, '<br>');
+export const SANITIZE_OPTIONS = {
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'b', 'em', 'i', 'del', 's', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'span'],
+    ALLOWED_ATTR: ['href', 'title', 'align'],
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i
+};
+
+/** markdown -> safe HTML; parse = marked.parse, sanitize = DOMPurify.sanitize */
+export function formatAnswer (text, { parse, sanitize }) {
+    const html = parse(String(text || ''), { gfm: true, breaks: true, mangle: false, headerIds: false });
+    return sanitize(html, SANITIZE_OPTIONS);
 }
 
 /** Lines of a unified diff with a kind for colouring. */

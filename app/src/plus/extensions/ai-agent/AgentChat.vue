@@ -65,7 +65,8 @@
                 <div
                     v-else-if="e.type === 'assistant'"
                     :key="e.id"
-                    class="plus-agent-msg is-assistant"
+                    class="plus-agent-msg is-assistant plus-agent-md"
+                    @click="openLink"
                     v-html="format(e.text)" />
 
                 <div
@@ -181,6 +182,8 @@
 </template>
 
 <script>
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { formatAnswer, diffLines, TOOL_LABELS } from './format.js';
 
 const EXT = 'ai-assistant';
@@ -250,7 +253,23 @@ export default {
         call (method, ...args) {
             return this.$plus.invoke(EXT, method, ...args).catch(e => { throw new Error(clean(e)); });
         },
-        format: formatAnswer,
+        format (text) {
+            return formatAnswer(text, { parse: (t, o) => marked.parse(t, o), sanitize: (h, o) => DOMPurify.sanitize(h, o) });
+        },
+        /** Links in answers open in the system browser, never inside the app. */
+        openLink (event) {
+            const link = event.target.closest && event.target.closest('a[href]');
+
+            if (!link) return;
+
+            event.preventDefault();
+
+            const href = link.getAttribute('href');
+
+            if (/^(https?:|mailto:)/i.test(href) && window.mainProcessAPI && window.mainProcessAPI.shellOpenExternal) {
+                window.mainProcessAPI.shellOpenExternal(href);
+            }
+        },
         diffLines,
         label (name) {
             return TOOL_LABELS[name] || name;
@@ -498,6 +517,84 @@ export default {
 .plus-agent-msg.is-assistant {
     background: var(--bg-secondary);
     white-space: normal;
+}
+
+.plus-agent-md > :first-child {
+    margin-top: 0;
+}
+
+.plus-agent-md > :last-child {
+    margin-bottom: 0;
+}
+
+.plus-agent-md p,
+.plus-agent-md ul,
+.plus-agent-md ol,
+.plus-agent-md pre,
+.plus-agent-md blockquote {
+    margin: 0 0 var(--space-2);
+}
+
+.plus-agent-md ul,
+.plus-agent-md ol {
+    padding-left: var(--space-6);
+}
+
+.plus-agent-md h1,
+.plus-agent-md h2,
+.plus-agent-md h3,
+.plus-agent-md h4 {
+    font-size: var(--font-size-ui-md);
+    font-weight: var(--font-weight-semibold);
+    margin: var(--space-3) 0 var(--space-1);
+    text-transform: none;
+}
+
+.plus-agent-md blockquote {
+    border-left: 3px solid var(--color-border-subtle);
+    color: var(--color-text-muted);
+    padding-left: var(--space-3);
+}
+
+.plus-agent-md table {
+    border-collapse: collapse;
+    display: block;
+    font-size: var(--font-size-ui-sm);
+    margin: 0 0 var(--space-2);
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.plus-agent-md th,
+.plus-agent-md td {
+    border: 1px solid var(--color-border-subtle);
+    min-width: 4em;
+    overflow-wrap: normal;
+    word-break: normal;
+    padding: var(--space-1) var(--space-2);
+    text-align: left;
+    vertical-align: top;
+}
+
+.plus-agent-md th {
+    background: var(--bg-primary);
+    font-weight: var(--font-weight-semibold);
+}
+
+.plus-agent-md hr {
+    border: none;
+    border-top: 1px solid var(--color-border-subtle);
+    margin: var(--space-3) 0;
+}
+
+.plus-agent-md pre {
+    background: var(--bg-primary);
+    border-radius: var(--radius-base);
+    padding: var(--space-2);
+}
+
+.plus-agent-md a {
+    color: var(--color-primary);
 }
 
 .plus-agent-msg pre {
