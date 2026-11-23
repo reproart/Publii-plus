@@ -2,11 +2,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { DOMParser } = require('./helpers/mini-dom');
 
 // ES module -> CommonJS for the test (no bundler)
-const source = fs.readFileSync(path.join(__dirname, '../extensions/ai-assistant/editor-adapter.js'), 'utf8')
+const blocksSource = fs.readFileSync(path.join(__dirname, '../extensions/ai-assistant/blocks.js'), 'utf8')
+    .replace(/export function /g, 'function ');
+const source = blocksSource + '\n' + fs.readFileSync(path.join(__dirname, '../extensions/ai-assistant/editor-adapter.js'), 'utf8')
+    .replace(/^import .*$/m, '')
     .replace(/export function /g, 'function ') + '\nmodule.exports = { createEditorAdapter, mergeTags };';
-const ctx = { module: { exports: {} } };
+const ctx = { module: { exports: {} }, globalThis: { crypto: require('node:crypto') } };
 vm.runInNewContext(source, ctx);
 const { createEditorAdapter, mergeTags } = ctx.module.exports;
 
@@ -110,13 +114,40 @@ describe('Publii Plus AI: editor adapter', () => {
         assert.equal(run('Intro.\n\nEnd.', { line: 2, ch: 0 }), 'Intro.\n\n## New\n\nBody\n\nEnd.');
     });
 
-    it('Block editor: read-only', () => {
-        const a = createEditorAdapter({ postData: { editor: 'blockeditor', text: '<p>x</p>' } });
+    it('Block editor: reads blocks as HTML, replaces and inserts after the selected block', () => {
+        const events = [];
+        let stored = JSON.stringify([
+            { id: 'b1', type: 'publii-paragraph', content: 'First', config: {} },
+            { id: 'b2', type: 'publii-paragraph', content: 'Second', config: {} }
+        ]);
+        const field = { get value () { return stored; }, set value (v) { stored = v; } };
+        const root = { querySelector: () => ({ getAttribute: () => 'b1' }) };
+        ctx.document = { getElementById: id => (id === 'publii-block-editor' ? root : id === 'post-editor' ? field : null) };
+        ctx.DOMParser = DOMParser;
+        const bus = { $emit: (name, value) => { events.push(name); if (name === 'block-editor-set-post-text') stored = value; } };
+        const a = createEditorAdapter({ postData: { editor: 'blockeditor', text: 'stale' }, $bus: bus });
 
-        assert.equal(a.canInsert, false);
-        assert.equal(a.getText(), '<p>x</p>');
-        assert.equal(a.insert('y'), false);
-        assert.equal(a.getSelection(), null);
+        assert.equal(a.canInsert, true);
+        assert.equal(a.getText(), '<p>First</p>\n<p>Second</p>');
+        assert.equal(events[0], 'publii-block-editor-save', 'blocks are saved into the field before reading');
+
+        assert.equal(a.insert('<h2>New</h2><p>Text</p>'), true);
+        assert.deepEqual(JSON.parse(stored).map(b => b.content), ['First', 'New', 'Text', 'Second'], 'inserted after the selected block');
+        assert.ok(events.includes('block-editor-content-updated'), 'the editor marks unsaved changes');
+
+        assert.equal(a.replaceAll('<p>Only</p>'), true);
+        assert.deepEqual(JSON.parse(stored).map(b => [b.type, b.content]), [['publii-paragraph', 'Only']]);
+
+        // new post: the single empty paragraph is replaced, not kept above the text
+        stored = JSON.stringify([{ id: 'e', type: 'publii-paragraph', content: '', config: {} }]);
+        root.querySelector = () => null;
+        a.insert('<p>Draft</p>');
+        assert.deepEqual(JSON.parse(stored).map(b => b.content), ['Draft']);
+
+        ctx.document = { getElementById: () => null };
+        assert.equal(a.getText(), 'stale', 'falls back to the saved text when the editor is not there');
+        assert.equal(a.replaceAll('<p>x</p>'), false);
+        delete ctx.document;
     });
 
     it('editors that are not ready report failure instead of throwing', () => {

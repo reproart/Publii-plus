@@ -1,6 +1,7 @@
 /**
  * Uniform access to the three Publii editors for the AI panel.
  * `context` is the post editor component (PostEditorTinyMCE / PostEditorMarkdown / PostEditorBlockEditor).
+ * The block editor gets HTML converted to blocks (blocks.js).
  *
  * adapter = {
  *   kind: 'tinymce' | 'markdown' | 'blockeditor',
@@ -11,6 +12,8 @@
  * }
  * Values passed to insert/replace are in the editor's format (HTML must be sanitized by the caller).
  */
+import { htmlToBlocks, blocksToHtml, inlineHtml } from './blocks.js';
+
 export function createEditorAdapter (context) {
     const kind = context && context.postData ? context.postData.editor : '';
 
@@ -138,7 +141,8 @@ export function createEditorAdapter (context) {
         };
     }
 
-    // Block editor (separate app in an iframe): read-only access to the last loaded/saved HTML.
+    if (kind === 'blockeditor') return createBlockEditorAdapter(context);
+
     return {
         kind: kind || 'unknown',
         format: 'html',
@@ -157,6 +161,101 @@ export function createEditorAdapter (context) {
         },
         replaceAll () {
             return false;
+        }
+    };
+}
+
+/**
+ * Block editor (Publii's own Vue component in the same window). Content goes through its bus events:
+ * 'publii-block-editor-save' writes the blocks JSON into #post-editor, 'block-editor-set-post-text' loads new JSON.
+ */
+function createBlockEditorAdapter (context) {
+    const bus = context.$bus;
+    const root = () => document.getElementById('publii-block-editor');
+    const field = () => document.getElementById('post-editor');
+
+    function currentBlocks () {
+        if (!root() || !field()) return null;
+
+        bus.$emit('publii-block-editor-save');
+
+        try {
+            const value = field().value;
+            return value ? JSON.parse(value) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function load (blocks) {
+        bus.$emit('block-editor-set-post-text', JSON.stringify(blocks));
+        bus.$emit('block-editor-content-updated');
+        return true;
+    }
+
+    /** The selected (or last active) block, else null = end of the post */
+    function activeBlockId () {
+        const wrapper = root() && root().querySelector('.wrapper.is-selected, .wrapper.is-activated');
+        return wrapper ? wrapper.getAttribute('data-id') : null;
+    }
+
+    return {
+        kind: 'blockeditor',
+        format: 'html',
+        canInsert: true,
+        getText () {
+            const blocks = currentBlocks();
+            return blocks ? blocksToHtml(blocks) : (context.postData.text || '');
+        },
+        getSelection () {
+            const selection = window.getSelection();
+
+            if (!selection || !selection.rangeCount || selection.isCollapsed) return null;
+
+            const range = selection.getRangeAt(0);
+            const container = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+            const host = container && container.closest('[contenteditable="true"]');
+
+            // only inside one text block of the block editor
+            if (!host || !root() || !root().contains(host) || host.id === 'post-title') return null;
+
+            const holder = document.createElement('div');
+            holder.appendChild(range.cloneContents());
+
+            if (!holder.textContent.trim()) return null;
+
+            return { text: holder.innerHTML, range: range.cloneRange(), host };
+        },
+        replaceSelection (saved, value) {
+            if (!saved || !saved.host || !document.body.contains(saved.host)) return false;
+
+            const selection = window.getSelection();
+            saved.host.focus();
+            selection.removeAllRanges();
+            selection.addRange(saved.range);
+            document.execCommand('insertHTML', false, inlineHtml(value));
+            bus.$emit('block-editor-content-updated');
+            return true;
+        },
+        insert (value) {
+            const blocks = currentBlocks();
+
+            if (!blocks) return false;
+
+            const added = htmlToBlocks(value);
+            const after = activeBlockId();
+            const index = after ? blocks.findIndex(b => b.id === after) : -1;
+            // drop a single empty paragraph of a new post
+            const base = blocks.length === 1 && blocks[0].type === 'publii-paragraph' && !String(blocks[0].content || '').trim() ? [] : blocks;
+
+            if (index >= 0 && base.length) base.splice(index + 1, 0, ...added);
+            else base.push(...added);
+
+            return load(base);
+        },
+        replaceAll (value) {
+            if (!root()) return false;
+            return load(htmlToBlocks(value));
         }
     };
 }

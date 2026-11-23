@@ -54,37 +54,12 @@
                             :loading="busy === 'seo'"
                             :disabled="!!busy"
                             :onClick="runSeo">Generate SEO</p-button>
-
-                        <div
+                        <button
                             v-if="seo"
-                            class="plus-ai-result">
-                            <div
-                                v-for="row in seoRows"
-                                :key="row.key"
-                                class="plus-ai-row">
-                                <div class="plus-ai-row-head">
-                                    <strong>{{ row.label }}</strong>
-                                    <span :class="{ 'plus-ai-count': true, 'is-over': row.limit && seo[row.key].length > row.limit }">{{ seo[row.key].length }}<template v-if="row.limit"> / {{ row.limit }}</template></span>
-                                </div>
-                                <textarea
-                                    v-model="seo[row.key]"
-                                    rows="2"
-                                    spellcheck="true"></textarea>
-                                <div class="plus-ai-row-buttons">
-                                    <span
-                                        v-if="row.current"
-                                        class="plus-ai-muted"
-                                        :title="row.current">current: {{ shorten(row.current) }}</span>
-                                    <button
-                                        type="button"
-                                        class="plus-ai-link"
-                                        @click="applySeo(row.key)">Apply</button>
-                                </div>
-                            </div>
-                            <p-button
-                                appearance="outline"
-                                :onClick="() => applySeo()">Apply all</p-button>
-                        </div>
+                            type="button"
+                            class="plus-ai-link"
+                            @click="modal = 'seo'">Show last result</button>
+
                     </div>
 
                     <!-- Tags -->
@@ -94,29 +69,12 @@
                             :loading="busy === 'tags'"
                             :disabled="!!busy"
                             :onClick="runTags">Suggest tags</p-button>
-
-                        <div
+                        <button
                             v-if="tagSuggestions"
-                            class="plus-ai-result">
-                            <label
-                                v-for="tag in tagSuggestions.tags"
-                                :key="tag.name"
-                                class="plus-ai-tag">
-                                <input
-                                    type="checkbox"
-                                    v-model="tag.selected">
-                                {{ tag.name }}
-                                <span
-                                    v-if="tag.isNew"
-                                    class="plus-ai-new">new</span>
-                                <span
-                                    v-if="tag.name === tagSuggestions.mainTag"
-                                    class="plus-ai-muted">main</span>
-                            </label>
-                            <p-button
-                                appearance="outline"
-                                :onClick="() => applyTags()">Add selected tags</p-button>
-                        </div>
+                            type="button"
+                            class="plus-ai-link"
+                            @click="modal = 'tags'">Show last result</button>
+
                     </div>
 
                     <!-- Write -->
@@ -146,62 +104,12 @@
                             :loading="busy === 'draft' || busy === 'post'"
                             :disabled="!!busy || !brief.trim()"
                             :onClick="runDraft">{{ fullPost ? 'Write post' : 'Write draft' }}</p-button>
-
-                        <div
+                        <button
                             v-if="draft"
-                            class="plus-ai-result">
-                            <strong>{{ draft.title }}</strong>
+                            type="button"
+                            class="plus-ai-link"
+                            @click="modal = 'write'">Show last result</button>
 
-                            <dl
-                                v-if="draft.seo"
-                                class="plus-ai-summary">
-                                <dt>Meta title</dt>
-                                <dd>{{ draft.seo.metaTitle }} <span class="plus-ai-muted">({{ draft.seo.metaTitle.length }}/70)</span></dd>
-                                <dt>Meta description</dt>
-                                <dd>{{ draft.seo.metaDescription }} <span class="plus-ai-muted">({{ draft.seo.metaDescription.length }}/160)</span></dd>
-                                <dt>Slug</dt>
-                                <dd>{{ draft.seo.slug }}</dd>
-                                <dt>Tags</dt>
-                                <dd>
-                                    <span
-                                        v-for="tag in draft.tags"
-                                        :key="tag.name"
-                                        class="plus-ai-chip">{{ tag.name }}<span
-                                            v-if="tag.isNew"
-                                            class="plus-ai-new">new</span></span>
-                                </dd>
-                            </dl>
-
-                            <div
-                                class="plus-ai-preview"
-                                v-html="draftPreview"></div>
-
-                            <div class="plus-ai-buttons">
-                                <p-button
-                                    v-if="draft.seo"
-                                    :onClick="applyEverything">Apply everything</p-button>
-                                <p-button
-                                    v-if="adapter.canInsert"
-                                    :appearance="draft.seo ? 'outline' : 'default'"
-                                    :onClick="() => insertDraft(true)">Replace content</p-button>
-                                <p-button
-                                    v-if="adapter.canInsert"
-                                    appearance="outline"
-                                    :onClick="() => insertDraft(false)">Insert at cursor</p-button>
-                                <p-button
-                                    appearance="outline"
-                                    :onClick="useTitle">Use title</p-button>
-                                <p-button
-                                    appearance="outline"
-                                    :onClick="() => copy(draft.markdown)">Copy Markdown</p-button>
-                            </div>
-                            <p
-                                v-if="draft.seo"
-                                class="plus-ai-muted">"Apply everything" replaces the content and fills the title, SEO fields and tags.</p>
-                            <p
-                                v-if="!adapter.canInsert"
-                                class="plus-ai-muted">The block editor does not support inserting – "Apply everything" fills the title, SEO and tags; copy the text with "Copy Markdown".</p>
-                        </div>
                     </div>
 
                     <!-- Rewrite selection -->
@@ -226,23 +134,10 @@
                                 :disabled="!!busy"
                                 :onClick="runRewrite">Rewrite selection</p-button>
 
-                            <div
-                                v-if="rewrite"
-                                class="plus-ai-result">
-                                <div
-                                    class="plus-ai-preview"
-                                    v-html="rewritePreview"></div>
-                                <div class="plus-ai-buttons">
-                                    <p-button :onClick="applyRewrite">Replace selection</p-button>
-                                    <p-button
-                                        appearance="outline"
-                                        :onClick="() => { rewrite = null; }">Discard</p-button>
-                                </div>
-                            </div>
                         </template>
                         <p
                             v-else
-                            class="plus-ai-muted">Not available in the block editor.</p>
+                            class="plus-ai-muted">Not available in this editor.</p>
                     </div>
 
                     <div
@@ -262,6 +157,140 @@
                 </template>
             </div>
         </div>
+        <plus-modal
+            v-if="modal === 'seo' && seo"
+            title="SEO suggestions"
+            @close="modal = ''">
+            <div
+                v-for="row in seoRows"
+                :key="row.key"
+                class="plus-ai-row">
+                <div class="plus-ai-row-head">
+                    <strong>{{ row.label }}</strong>
+                    <span :class="{ 'plus-ai-count': true, 'is-over': row.limit && seo[row.key].length > row.limit }">{{ seo[row.key].length }}<template v-if="row.limit"> / {{ row.limit }}</template></span>
+                </div>
+                <textarea
+                    v-model="seo[row.key]"
+                    class="plus-ai-input"
+                    rows="2"
+                    spellcheck="true"></textarea>
+                <div class="plus-ai-row-buttons">
+                    <span
+                        v-if="row.current"
+                        class="plus-ai-muted"
+                        :title="row.current">current: {{ shorten(row.current) }}</span>
+                    <button
+                        type="button"
+                        class="plus-ai-link"
+                        @click="applySeo(row.key)">Apply</button>
+                </div>
+            </div>
+            <template #footer>
+                <p-button :onClick="() => { applySeo(); modal = ''; }">Apply all</p-button>
+                <p-button
+                    appearance="outline"
+                    :onClick="() => { modal = ''; }">Close</p-button>
+                <span class="plus-ai-muted plus-ai-usage">{{ lastUsage }}</span>
+            </template>
+        </plus-modal>
+
+        <plus-modal
+            v-if="modal === 'tags' && tagSuggestions"
+            title="Suggested tags"
+            @close="modal = ''">
+            <label
+                v-for="tag in tagSuggestions.tags"
+                :key="tag.name"
+                class="plus-ai-tag">
+                <input
+                    type="checkbox"
+                    v-model="tag.selected">
+                {{ tag.name }}
+                <span
+                    v-if="tag.isNew"
+                    class="plus-ai-new">new</span>
+                <span
+                    v-if="tag.name === tagSuggestions.mainTag"
+                    class="plus-ai-muted">main</span>
+            </label>
+            <template #footer>
+                <p-button :onClick="() => { applyTags(); modal = ''; }">Add selected tags</p-button>
+                <p-button
+                    appearance="outline"
+                    :onClick="() => { modal = ''; }">Close</p-button>
+                <span class="plus-ai-muted plus-ai-usage">{{ lastUsage }}</span>
+            </template>
+        </plus-modal>
+
+        <plus-modal
+            v-if="modal === 'write' && draft"
+            :title="draft.title || 'Draft'"
+            @close="modal = ''">
+            <dl
+                v-if="draft.seo"
+                class="plus-ai-summary">
+                <dt>Meta title</dt>
+                <dd>{{ draft.seo.metaTitle }} <span class="plus-ai-muted">({{ draft.seo.metaTitle.length }}/70)</span></dd>
+                <dt>Meta description</dt>
+                <dd>{{ draft.seo.metaDescription }} <span class="plus-ai-muted">({{ draft.seo.metaDescription.length }}/160)</span></dd>
+                <dt>Slug</dt>
+                <dd>{{ draft.seo.slug }}</dd>
+                <dt>Tags</dt>
+                <dd>
+                    <span
+                        v-for="tag in draft.tags"
+                        :key="tag.name"
+                        class="plus-ai-chip">{{ tag.name }}<span
+                            v-if="tag.isNew"
+                            class="plus-ai-new">new</span></span>
+                </dd>
+            </dl>
+            <div
+                class="plus-ai-preview"
+                v-html="draftPreview"></div>
+            <div
+                v-if="error"
+                class="msg msg-small msg-alert plus-ai-error">{{ error }}</div>
+            <template #footer>
+                <p-button
+                    v-if="draft.seo"
+                    :onClick="applyEverything">Apply everything</p-button>
+                <p-button
+                    v-if="adapter.canInsert"
+                    :appearance="draft.seo ? 'outline' : 'default'"
+                    :onClick="() => insertDraft(true)">Replace content</p-button>
+                <p-button
+                    v-if="adapter.canInsert"
+                    appearance="outline"
+                    :onClick="() => insertDraft(false)">{{ adapter.kind === 'blockeditor' ? 'Insert after selected block' : 'Insert at cursor' }}</p-button>
+                <p-button
+                    appearance="outline"
+                    :onClick="useTitle">Use title</p-button>
+                <p-button
+                    appearance="outline"
+                    :onClick="() => copy(draft.markdown)">Copy Markdown</p-button>
+                <span class="plus-ai-muted plus-ai-usage">{{ lastUsage }}</span>
+            </template>
+        </plus-modal>
+
+        <plus-modal
+            v-if="modal === 'rewrite' && rewrite"
+            title="Rewritten text"
+            @close="modal = ''">
+            <div
+                class="plus-ai-preview"
+                v-html="rewritePreview"></div>
+            <div
+                v-if="error"
+                class="msg msg-small msg-alert plus-ai-error">{{ error }}</div>
+            <template #footer>
+                <p-button :onClick="applyRewrite">Replace selection</p-button>
+                <p-button
+                    appearance="outline"
+                    :onClick="() => { rewrite = null; modal = ''; }">Discard</p-button>
+                <span class="plus-ai-muted plus-ai-usage">{{ lastUsage }}</span>
+            </template>
+        </plus-modal>
     </div>
 </template>
 
@@ -271,9 +300,11 @@ import { marked } from 'marked';
 import { call, newRequestId } from './api';
 import { createEditorAdapter, mergeTags } from './editor-adapter';
 import { currentThemeStyles } from './theme-styles';
+import PlusModal from '../../components/PlusModal.vue';
 
 export default {
     name: 'plus-ai-panel',
+    components: { PlusModal },
     props: ['context'],
     data () {
         return {
@@ -301,7 +332,8 @@ export default {
             draft: null,
             rewriteAction: 'improve',
             rewriteInstruction: '',
-            rewrite: null
+            rewrite: null,
+            modal: ''
         };
     },
     computed: {
@@ -383,7 +415,10 @@ export default {
         async runSeo () {
             const result = await this.run('seo', { ...this.baseInput(), websiteName: this.site.config ? this.site.config.displayName : '' });
 
-            if (result) this.seo = result;
+            if (result) {
+                this.seo = result;
+                this.modal = 'seo';
+            }
         },
         applySeo (key, values = this.seo, quiet = false) {
             const keys = key ? [key] : ['metaTitle', 'metaDescription', 'slug'];
@@ -408,6 +443,7 @@ export default {
                 const onPost = new Set((this.postData.tags || []).map(t => String(t).toLowerCase()));
                 result.tags = result.tags.map(t => ({ ...t, selected: !onPost.has(t.name.toLowerCase()) }));
                 this.tagSuggestions = result;
+                this.modal = 'tags';
             }
         },
         applyTags (suggestions = this.tagSuggestions, onlySelected = true, quiet = false) {
@@ -434,7 +470,10 @@ export default {
                 existingTags: (this.site.tags || []).map(t => t.name)
             });
 
-            if (result) this.draft = result;
+            if (result) {
+                this.draft = result;
+                this.modal = 'write';
+            }
         },
         applyEverything () {
             const d = this.draft;
@@ -451,14 +490,20 @@ export default {
             this.useTitle();
             this.applySeo(null, d.seo, true);
             this.applyTags({ tags: d.tags, mainTag: d.mainTag }, false, true);
+            this.modal = '';
             this.$bus.$emit('message-display', { message: 'Content, title, SEO fields and tags updated – remember to save the post.', type: 'success', lifeTime: 4 });
         },
         insertDraft (replace) {
             const value = this.adapter.format === 'html' ? DOMPurify.sanitize(this.draft.html) : this.draft.markdown;
             const ok = replace ? this.adapter.replaceAll(value) : this.adapter.insert(value);
 
-            if (!ok) this.error = 'The editor is not ready.';
-            else if (!this.postData.title) this.useTitle();
+            if (!ok) {
+                this.error = 'The editor is not ready.';
+                return;
+            }
+
+            if (!this.postData.title) this.useTitle();
+            this.modal = '';
         },
         useTitle () {
             const title = this.draft.title;
@@ -485,13 +530,19 @@ export default {
                 instruction: this.rewriteInstruction
             });
 
-            if (result) this.rewrite = { ...result, selection };
+            if (result) {
+                this.rewrite = { ...result, selection };
+                this.modal = 'rewrite';
+            }
         },
         applyRewrite () {
             const value = this.adapter.format === 'html' ? DOMPurify.sanitize(this.rewrite.text) : this.rewrite.text;
 
             if (!this.adapter.replaceSelection(this.rewrite.selection, value)) this.error = 'The editor is not ready.';
-            else this.rewrite = null;
+            else {
+                this.rewrite = null;
+                this.modal = '';
+            }
         },
         copy (text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -505,7 +556,8 @@ export default {
 <style>
 .plus-ai textarea,
 .plus-ai select,
-.plus-ai input[type="text"] {
+.plus-ai input[type="text"],
+.plus-modal textarea.plus-ai-input {
     box-sizing: border-box;
     margin: var(--space-1) 0 var(--space-2);
     width: 100%;
@@ -655,5 +707,18 @@ export default {
 .plus-ai-usage {
     margin-top: var(--space-3);
     word-break: break-word;
+}
+.plus-modal .plus-ai-preview {
+    font-size: var(--font-size-ui-md);
+    max-height: none;
+    padding: var(--space-3) var(--space-4);
+}
+
+.plus-modal-footer .plus-ai-usage {
+    margin: 0 0 0 auto;
+}
+
+.plus-modal .plus-ai-row {
+    margin-bottom: var(--space-4);
 }
 </style>
