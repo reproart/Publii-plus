@@ -406,7 +406,7 @@ export default {
     background: var(--bg-primary);
     display: flex;
     flex-direction: column;
-    inset: 0;
+    inset: var(--topbar-height) 0 0 0;
     position: fixed;
     z-index: var(--layer-overlay);
 }
@@ -422,7 +422,7 @@ export default {
 }
 
 .plus-te-header {
-    padding-left: var(--space-16);
+    padding-left: var(--space-4);
 }
 
 .plus-te-title {

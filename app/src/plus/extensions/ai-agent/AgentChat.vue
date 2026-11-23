@@ -402,7 +402,7 @@ export default {
     max-width: 100vw;
     position: fixed;
     right: 0;
-    top: 0;
+    top: var(--topbar-height);
     width: 460px;
     z-index: var(--layer-overlay);
 }
@@ -419,7 +419,7 @@ export default {
 }
 
 .plus-agent-header {
-    padding-top: var(--space-6);
+    padding-top: var(--space-4);
 }
 
 .plus-agent-options {
@@ -461,10 +461,10 @@ export default {
 }
 
 .plus-agent-example {
-    background: var(--bg-secondary);
-    border: 1px solid var(--color-border-subtle);
+    background: var(--button-secondary-bg);
+    border: none;
     border-radius: var(--radius-base);
-    color: inherit;
+    color: var(--button-secondary-color);
     cursor: pointer;
     display: block;
     font: inherit;
@@ -476,7 +476,8 @@ export default {
 }
 
 .plus-agent-example:hover {
-    background: var(--color-surface-subtle);
+    background: var(--button-secondary-bg-hover);
+    color: var(--button-secondary-color-hover);
 }
 
 .plus-agent-msg {
