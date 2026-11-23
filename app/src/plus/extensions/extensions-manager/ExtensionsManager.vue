@@ -62,15 +62,7 @@
                     <div
                         v-for="item in visible(group.items)"
                         :key="item.type + item.id"
-                        class="plus-em-item">
-                        <div class="plus-em-item-info">
-                            <div>
-                                <strong>{{ item.name }}</strong>
-                                <span class="plus-em-chip">{{ item.type }}</span>
-                                <span class="plus-em-muted">{{ item.id }} · v{{ item.version }}<template v-if="item.author"> · {{ item.author }}</template></span>
-                            </div>
-                            <p class="plus-em-desc">{{ item.description }}</p>
-                        </div>
+                        class="plus-em-item is-catalog">
                         <div class="plus-em-item-action">
                             <span
                                 v-if="item.status === 'installed'"
@@ -84,6 +76,14 @@
                                 :loading="busy === item.sourceId + item.id"
                                 :disabled="!!busy"
                                 :onClick="() => install(item)">{{ item.status === 'update' ? 'Update from v' + item.installed : 'Install' }}</p-button>
+                        </div>
+                        <div class="plus-em-item-info">
+                            <div>
+                                <strong>{{ item.name }}</strong>
+                                <span class="plus-em-chip">{{ item.type }}</span>
+                                <span class="plus-em-muted">{{ item.id }} · v{{ item.version }}<template v-if="item.author"> · {{ item.author }}</template></span>
+                            </div>
+                            <p class="plus-em-desc">{{ item.description }}</p>
                         </div>
                     </div>
 
@@ -529,6 +529,17 @@ export default {
 
 .plus-em-item-info {
     min-width: 0;
+}
+
+/* catalog: the action comes first, in a fixed column, so it stays next to the name on wide windows */
+.plus-em-item.is-catalog {
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+.plus-em-item.is-catalog .plus-em-item-action {
+    justify-content: flex-start;
+    width: 150px;
 }
 
 .plus-em-item-action {
