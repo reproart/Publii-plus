@@ -1,8 +1,11 @@
 <template>
     <div
-        class="plus-agent"
+        :class="{ 'plus-agent': true, 'is-drop-target': dragOver }"
         role="dialog"
-        aria-label="AI agent">
+        aria-label="AI agent"
+        @dragover.prevent="dragOver = true"
+        @dragleave.self="dragOver = false"
+        @drop.prevent="onDrop">
         <header class="plus-agent-header">
             <div class="plus-agent-title">
                 <strong>AI agent</strong>
@@ -60,7 +63,22 @@
                 <div
                     v-if="e.type === 'user'"
                     :key="e.id"
-                    class="plus-agent-msg is-user">{{ e.text }}</div>
+                    class="plus-agent-msg is-user">
+                    <template v-if="e.text">{{ e.text }}</template>
+                    <div
+                        v-if="e.images && e.images.length"
+                        class="plus-agent-images">
+                        <button
+                            v-for="(src, i) in e.images"
+                            :key="i"
+                            type="button"
+                            class="plus-agent-thumb"
+                            title="Show full size"
+                            @click="viewer = src"><img
+                                :src="src"
+                                alt="Attached image"></button>
+                    </div>
+                </div>
 
                 <div
                     v-else-if="e.type === 'assistant'"
@@ -157,15 +175,47 @@
         </div>
 
         <footer class="plus-agent-composer">
+            <div
+                v-if="attachments.length"
+                class="plus-agent-images">
+                <div
+                    v-for="(src, i) in attachments"
+                    :key="i"
+                    class="plus-agent-thumb is-removable">
+                    <img
+                        :src="src"
+                        alt="Image to send">
+                    <button
+                        type="button"
+                        class="plus-agent-thumb-remove"
+                        title="Remove"
+                        aria-label="Remove image"
+                        @click="attachments.splice(i, 1)">×</button>
+                </div>
+            </div>
             <textarea
                 ref="input"
                 v-model="draft"
                 rows="3"
                 :placeholder="pendingWrites.length ? 'Apply or reject the changes above – or write what to do instead' : 'Message the agent (Ctrl+Enter to send)'"
                 @keydown.enter.ctrl.prevent="send"
-                @keydown.enter.meta.prevent="send" />
+                @keydown.enter.meta.prevent="send"
+                @paste="onPaste" />
             <div class="plus-agent-composer-row">
-                <span class="plus-agent-muted">
+                <input
+                    ref="file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    hidden
+                    @change="onPick">
+                <button
+                    type="button"
+                    class="plus-agent-attach"
+                    title="Attach images – or paste them (Ctrl/Cmd+V) or drop them here"
+                    :disabled="attachments.length >= maxImages"
+                    @click="$refs.file.click()">+ Image</button>
+                <span class="plus-agent-muted plus-agent-tokens">
                     <template v-if="usage.input || usage.output">Tokens: {{ usage.input }} in / {{ usage.output }} out</template>
                 </span>
                 <p-button
@@ -174,10 +224,20 @@
                     :onClick="stop">Stop</p-button>
                 <p-button
                     v-else
-                    :disabled="!draft.trim() || !providers.length"
+                    :disabled="(!draft.trim() && !attachments.length) || !providers.length"
                     :onClick="send">Send</p-button>
             </div>
         </footer>
+
+        <plus-modal
+            v-if="viewer"
+            title="Image"
+            @close="viewer = ''">
+            <img
+                class="plus-agent-viewer"
+                :src="viewer"
+                alt="Attached image">
+        </plus-modal>
     </div>
 </template>
 
@@ -185,6 +245,8 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { formatAnswer, diffLines, TOOL_LABELS } from './format.js';
+import { imageFiles, prepareImage, MAX_IMAGES } from './images.js';
+import PlusModal from '../../components/PlusModal.vue';
 
 const EXT = 'ai-assistant';
 // chats survive closing the panel and opening the post editor (the sidebar is re-created)
@@ -196,8 +258,13 @@ function clean (error) {
 
 export default {
     name: 'plus-agent-chat',
+    components: { PlusModal },
     data () {
         return {
+            attachments: [],
+            maxImages: MAX_IMAGES,
+            dragOver: false,
+            viewer: '',
             sessionId: '',
             entries: [],
             pending: [],
@@ -332,14 +399,46 @@ export default {
         },
         async send () {
             const text = this.draft.trim();
+            const images = this.attachments.slice();
 
-            if (!text || this.busy) return;
+            if ((!text && !images.length) || this.busy) return;
 
             this.draft = '';
+            this.attachments = [];
             await this.run(async () => {
                 await this.ensureSession();
-                return this.call('agent:send', this.sessionId, text, { autoApprove: this.autoApprove, providerId: this.providerId });
+                return this.call('agent:send', this.sessionId, text, { autoApprove: this.autoApprove, providerId: this.providerId, images });
             });
+        },
+        async addImages (files) {
+            for (const file of files) {
+                if (this.attachments.length >= MAX_IMAGES) {
+                    this.$bus.$emit('message-display', { message: `Up to ${MAX_IMAGES} images per message.`, type: 'warning', lifeTime: 4 });
+                    break;
+                }
+
+                try {
+                    this.attachments.push(await prepareImage(file));
+                } catch (e) {
+                    this.$bus.$emit('message-display', { message: e.message, type: 'warning', lifeTime: 4 });
+                }
+            }
+        },
+        onPaste (event) {
+            const files = imageFiles(event.clipboardData && event.clipboardData.items);
+
+            if (!files.length) return;   // plain text paste
+
+            event.preventDefault();
+            this.addImages(files);
+        },
+        onDrop (event) {
+            this.dragOver = false;
+            this.addImages(imageFiles(event.dataTransfer && event.dataTransfer.files));
+        },
+        onPick (event) {
+            this.addImages(imageFiles(event.target.files));
+            event.target.value = '';
         },
         useExample (text) {
             this.draft = text;
@@ -711,6 +810,90 @@ export default {
     font: inherit;
     resize: vertical;
     width: 100%;
+}
+
+.plus-agent.is-drop-target {
+    outline: 2px dashed var(--color-primary);
+    outline-offset: -4px;
+}
+
+.plus-agent-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.plus-agent-msg .plus-agent-images {
+    margin-top: var(--space-2);
+}
+
+.plus-agent-thumb {
+    background: var(--bg-primary);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-base);
+    cursor: pointer;
+    height: 64px;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+    width: 96px;
+}
+
+.plus-agent-thumb img {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.plus-agent-thumb.is-removable {
+    cursor: default;
+}
+
+.plus-agent-thumb-remove {
+    background: var(--bg-primary);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-base);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: var(--font-size-ui-sm);
+    line-height: 1;
+    padding: var(--space-1);
+    position: absolute;
+    right: var(--space-1);
+    top: var(--space-1);
+}
+
+.plus-agent-attach {
+    background: var(--button-secondary-bg);
+    border: none;
+    border-radius: var(--radius-base);
+    color: var(--button-secondary-color);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--font-size-ui-sm);
+    padding: var(--space-1) var(--space-2);
+}
+
+.plus-agent-attach:hover {
+    background: var(--button-secondary-bg-hover);
+}
+
+.plus-agent-attach:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.plus-agent-tokens {
+    flex: 1;
+    padding: 0 var(--space-2);
+}
+
+.plus-agent-viewer {
+    display: block;
+    height: auto;
+    margin: 0 auto;
+    max-width: 100%;
 }
 
 .plus-agent-composer-row {

@@ -77,7 +77,14 @@ const PROTOCOLS = {
             const input = [];
 
             for (const m of messages) {
-                if (m.role === 'user') input.push({ role: 'user', content: m.text });
+                if (m.role === 'user') {
+                    input.push({
+                        role: 'user',
+                        content: m.images && m.images.length
+                            ? [{ type: 'input_text', text: m.text || '' }, ...m.images.map(url => ({ type: 'input_image', image_url: url }))]
+                            : m.text
+                    });
+                }
                 else if (m.role === 'assistant') {
                     // replay the provider's own output items (keeps reasoning items with tool calls)
                     if (m.raw && m.raw.protocol === 'openai-responses') input.push(...m.raw.items);
@@ -177,7 +184,14 @@ const PROTOCOLS = {
             const out = [{ role: 'system', content: system }];
 
             for (const m of messages) {
-                if (m.role === 'user') out.push({ role: 'user', content: m.text });
+                if (m.role === 'user') {
+                    out.push({
+                        role: 'user',
+                        content: m.images && m.images.length
+                            ? [{ type: 'text', text: m.text || '' }, ...m.images.map(url => ({ type: 'image_url', image_url: { url } }))]
+                            : m.text
+                    });
+                }
                 else if (m.role === 'assistant') {
                     const msg = { role: 'assistant', content: m.text || null };
 
@@ -319,7 +333,7 @@ async function generateStructured ({ config, apiKey, system, user, schema, schem
 
 /**
  * One agent turn with tools. messages (protocol-neutral):
- *   { role: 'user', text } | { role: 'assistant', text, toolCalls: [{ id, name, arguments }], raw? } | { role: 'tool', id, name, output }
+ *   { role: 'user', text, images?: [data URL] } | { role: 'assistant', text, toolCalls: [{ id, name, arguments }], raw? } | { role: 'tool', id, name, output }
  * Returns { text, toolCalls, raw, usage, model }.
  */
 async function chat ({ config, apiKey, system, messages, tools, signal, fetchImpl }) {

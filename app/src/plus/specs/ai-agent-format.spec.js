@@ -30,3 +30,29 @@ describe('Publii Plus: AI agent – answer formatting', () => {
         assert.deepEqual(kinds, ['file', 'file', 'hunk', 'del', 'add', '']);
     });
 });
+
+describe('Publii Plus: AI agent – image helpers', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../extensions/ai-agent/images.js'), 'utf8')
+        .replace(/export (async function|function|const) /g, '$1 ') + '\nmodule.exports = { imageFiles, fitSize, MAX_SIDE };';
+    const c = { module: { exports: {} } };
+    vm.runInNewContext(src, c);
+    const { imageFiles, fitSize } = c.module.exports;
+
+    it('keeps the aspect ratio and only scales down', () => {
+        assert.equal(JSON.stringify(fitSize(3200, 1600)), JSON.stringify({ width: 1600, height: 800, scaled: true }));
+        assert.equal(JSON.stringify(fitSize(900, 3000)), JSON.stringify({ width: 480, height: 1600, scaled: true }));
+        assert.equal(JSON.stringify(fitSize(800, 600)), JSON.stringify({ width: 800, height: 600, scaled: false }));
+    });
+
+    it('takes only image files from clipboard items and file lists', () => {
+        const png = { type: 'image/png', name: 'a.png' };
+        const items = [
+            { kind: 'string', type: 'text/plain' },
+            { kind: 'file', type: 'image/png', getAsFile: () => png },
+            { kind: 'file', type: 'application/pdf', getAsFile: () => ({ type: 'application/pdf' }) }
+        ];
+        assert.equal(imageFiles(items).length, 1);
+        assert.equal(imageFiles([png, { type: 'image/svg+xml' }, { type: 'image/jpeg' }]).length, 2, 'SVG is not sent (not a raster image)');
+        assert.equal(imageFiles(null).length, 0);
+    });
+});

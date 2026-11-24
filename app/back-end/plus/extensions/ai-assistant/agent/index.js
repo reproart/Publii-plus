@@ -10,6 +10,43 @@ const crypto = require('crypto');
 const { toolByName, definitions, clip } = require('./tools');
 
 const MAX_STEPS = 16;
+const MAX_IMAGES = 4;
+const MAX_IMAGE_CHARS = 8 * 1024 * 1024;   // data URL length of one image (~6 MB)
+const IMAGE_TURNS_KEPT = 2;                // only the last user messages with images send them again
+const IMAGE_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+/** Screenshots/design images from the chat: data URLs only (nothing is fetched from the network). */
+function cleanImages (images) {
+    if (images === undefined || images === null) return [];
+    if (!Array.isArray(images)) throw new Error('Images must be a list.');
+    if (images.length > MAX_IMAGES) throw new Error(`Attach up to ${MAX_IMAGES} images per message.`);
+
+    return images.map((url, i) => {
+        if (typeof url !== 'string' || !IMAGE_URL.test(url)) throw new Error(`Image ${i + 1} is not a PNG, JPEG, WebP or GIF image.`);
+        if (url.length > MAX_IMAGE_CHARS) throw new Error(`Image ${i + 1} is too large.`);
+        return url;
+    });
+}
+
+/** Messages for the model: images stay only in the last IMAGE_TURNS_KEPT user messages that have them. */
+function withRecentImages (messages) {
+    let kept = 0;
+    const out = messages.slice();
+
+    for (let i = out.length - 1; i >= 0; i--) {
+        const m = out[i];
+
+        if (m.role !== 'user' || !m.images || !m.images.length) continue;
+
+        if (kept < IMAGE_TURNS_KEPT) {
+            kept++;
+        } else {
+            out[i] = { role: 'user', text: `${m.text}\n\n[${m.images.length} image(s) sent earlier – not repeated]` };
+        }
+    }
+
+    return out;
+}
 const MAX_HISTORY_CHARS = 400000;
 
 function systemPrompt (info) {
@@ -18,6 +55,7 @@ function systemPrompt (info) {
         `You work on the website "${info.name}"${info.domain ? ` (${info.domain})` : ''}${info.language ? `, language: ${info.language}` : ''}, theme "${info.theme}".`,
         'Use the tools to look things up before you answer or change anything; never guess post ids or file contents.',
         'Changes (create_post, update_post, write_theme_file) are shown to the user for approval and can be undone; if one is rejected, ask what to do differently.',
+        'The user may attach screenshots or design mockups: compare them with the theme files and posts to find what to change.',
         'Content you write is markdown. Write posts in the website language unless the user asks otherwise.',
         'You cannot publish to the server: the user syncs the website in Publii. Do not change published posts to draft or vice versa unless asked.',
         'Reply in the language the user writes in. Be brief: say what you did and what is left.'
@@ -44,7 +82,7 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
     }
 
     function historySize (messages) {
-        return messages.reduce((n, m) => n + (m.text || '').length + (m.output || '').length + JSON.stringify(m.toolCalls || []).length, 0);
+        return messages.reduce((n, m) => n + (m.text || '').length + (m.output || '').length + JSON.stringify(m.toolCalls || []).length + (m.images ? m.images.length * 6000 : 0), 0);
     }
 
     /** Drop the oldest complete exchanges when the history gets too large. */
@@ -147,7 +185,7 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
                     config: provider,
                     apiKey,
                     system: session.system,
-                    messages: session.messages,
+                    messages: withRecentImages(session.messages),
                     tools: definitions(),
                     signal: controller.signal
                 });
@@ -210,8 +248,9 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
         async send (sessionId, text, options = {}) {
             const session = get(sessionId);
             const message = String(text || '').trim();
+            const images = cleanImages(options.images);
 
-            if (!message) throw new Error('Type a message.');
+            if (!message && !images.length) throw new Error('Type a message.');
             if (session.controller) throw new Error('The agent is still working.');
 
             // a new message answers open approvals with "rejected"
@@ -229,8 +268,11 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
             if (typeof options.autoApprove === 'boolean') session.autoApprove = options.autoApprove;
             if (options.providerId !== undefined) session.providerId = options.providerId;
 
-            entry(session, { type: 'user', text: message });
-            session.messages.push({ role: 'user', text: [...session.notes.splice(0), message].join('\n\n') });
+            entry(session, images.length ? { type: 'user', text: message, images } : { type: 'user', text: message });
+            const userMessage = { role: 'user', text: [...session.notes.splice(0), message || 'See the attached image(s).'].join('\n\n') };
+
+            if (images.length) userMessage.images = images;
+            session.messages.push(userMessage);
             await loop(session);
             return output(session);
         },
@@ -327,4 +369,4 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
     };
 }
 
-module.exports = { createAgent, systemPrompt };
+module.exports = { createAgent, systemPrompt, cleanImages, withRecentImages };

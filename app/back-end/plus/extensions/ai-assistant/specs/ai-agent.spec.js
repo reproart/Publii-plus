@@ -262,3 +262,47 @@ describe('Publii Plus: AI agent – loop', () => {
         assert.throws(() => contentFor('blockeditor', 'a', {}), /block editor/);
     });
 });
+
+describe('Publii Plus: AI agent – images', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+
+    it('sends images as vision content in both protocols', () => {
+        const msgs = [{ role: 'user', text: 'Make it look like this', images: [PNG] }];
+        const chatBody = PROTOCOLS['openai-chat'].buildChat({ config: { model: 'm' }, system: 'S', messages: msgs, tools: [] }).body;
+        assert.deepEqual(chatBody.messages[1].content, [{ type: 'text', text: 'Make it look like this' }, { type: 'image_url', image_url: { url: PNG } }]);
+
+        const respBody = PROTOCOLS['openai-responses'].buildChat({ config: { model: 'm' }, system: 'S', messages: msgs, tools: [] }).body;
+        assert.deepEqual(respBody.input[0].content, [{ type: 'input_text', text: 'Make it look like this' }, { type: 'input_image', image_url: PNG }]);
+
+        const plain = PROTOCOLS['openai-chat'].buildChat({ config: { model: 'm' }, system: 'S', messages: [{ role: 'user', text: 'hi' }], tools: [] }).body;
+        assert.equal(plain.messages[1].content, 'hi', 'text-only messages stay plain strings');
+    });
+
+    it('validates images and keeps them only in the last two image messages', async () => {
+        const { cleanImages, withRecentImages } = require('../agent');
+        assert.throws(() => cleanImages(['https://example.com/x.png']), /not a PNG/);
+        assert.throws(() => cleanImages(['data:text/html;base64,PGI+']), /not a PNG/);
+        assert.throws(() => cleanImages([PNG, PNG, PNG, PNG, PNG]), /up to 4/);
+        assert.deepEqual(cleanImages(undefined), []);
+
+        const history = withRecentImages([
+            { role: 'user', text: 'one', images: [PNG] },
+            { role: 'assistant', text: 'ok', toolCalls: [] },
+            { role: 'user', text: 'two', images: [PNG, PNG] },
+            { role: 'user', text: 'three', images: [PNG] }
+        ]);
+        assert.deepEqual(history.map(m => [m.text, (m.images || []).length]), [
+            ['one\n\n[1 image(s) sent earlier – not repeated]', 0], ['ok', 0], ['two', 2], ['three', 1]
+        ]);
+
+        // through the loop: image-only message, image shown in the entry and sent to the model
+        const model = scripted([{ text: 'I see a red header.' }]);
+        const { agent } = makeAgent(model);
+        const { sessionId } = agent.start({ site: 'blog' });
+        const out = await agent.send(sessionId, '', { images: [PNG] });
+        assert.deepEqual(out.entries[0].images, [PNG]);
+        assert.deepEqual(model.seen[0].messages[0].images, [PNG]);
+        assert.match(model.seen[0].messages[0].text, /attached image/);
+        await assert.rejects(agent.send(sessionId, '', {}), /Type a message/);
+    });
+});
