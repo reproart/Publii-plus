@@ -5,6 +5,7 @@
  *   kind 'write'  – needs the user's approval: plan(args, ctx) -> { title, details, diff, apply() }
  *                   apply() -> { result, undo() } ; the plan is shown to the user before anything changes
  *   kind 'client' – executed by the renderer (e.g. starting Publii's preview)
+ *   alwaysAsk     – approval even when the user turned on auto-apply (publishing to the server)
  *
  * ctx: { site, data (publii-data), theme (theme-editor service), markdownToHtml, createDiff }
  */
@@ -270,6 +271,96 @@ const TOOLS = [
                         result: { ok: true, path: rel },
                         undo: () => (previousOverride === null ? ctx.theme.revert(ctx.site, rel) : ctx.theme.save(ctx.site, rel, previousOverride))
                     };
+                }
+            };
+        }
+    },
+    {
+        name: 'inbox_status',
+        kind: 'read',
+        description: 'Content inbox of this website (Markdown files from GitHub or a folder that become posts): settings, ' +
+            'last runs and what the next import would do (new / changed / conflicts).',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        run: async (args, ctx) => {
+            if (!ctx.inbox) throw new Error('The content inbox is not available.');
+
+            const status = ctx.inbox.status(ctx.site);
+            const c = status.config;
+            const out = {
+                source: c.source === 'folder' ? { folder: c.dir } : { github: c.repo, branch: c.branch, folder: c.folder },
+                automatic: c.enabled ? `every ${c.intervalMinutes} min while Publii Plus is open` : 'off',
+                newPostsAs: c.defaultStatus,
+                syncAfterImport: c.autoSync,
+                autoSyncPossible: status.canPublish ? 'no: ' + status.canPublish : 'yes',
+                importedPosts: status.imported,
+                lastRuns: status.log.slice(0, 5).map(l => ({ at: new Date(l.at).toISOString(), created: l.created, updated: l.updated, errors: l.errors, conflicts: l.conflicts, synced: l.synced, problem: l.error || l.syncError || '' }))
+            };
+
+            try {
+                out.next = (await ctx.inbox.check(ctx.site)).items.filter(i => i.action !== 'unchanged');
+            } catch (e) {
+                out.next = 'cannot read the inbox: ' + e.message;
+            }
+
+            return out;
+        }
+    },
+    {
+        name: 'inbox_import',
+        kind: 'write',
+        alwaysAsk: true,
+        description: 'Import new and changed Markdown files of the content inbox as posts now; optionally render and sync the website afterwards.',
+        parameters: {
+            type: 'object',
+            properties: { publish: { type: 'boolean', description: 'Render and sync after the import (default: the inbox setting)' } },
+            additionalProperties: false
+        },
+        async plan (args, ctx) {
+            if (!ctx.inbox) throw new Error('The content inbox is not available.');
+
+            const c = ctx.inbox.status(ctx.site).config;
+            const items = (await ctx.inbox.check(ctx.site)).items.filter(i => i.action !== 'unchanged');
+            const work = items.filter(i => ['create', 'update', 'unpublish'].includes(i.action));
+            const publish = typeof args.publish === 'boolean' ? args.publish : c.autoSync;
+
+            if (!work.length) throw new Error('Nothing to import: the inbox has no new or changed files.' + (items.length ? ' Other items: ' + items.map(i => `${i.path} (${i.action}${i.reason ? ': ' + i.reason : ''})`).join(', ') : ''));
+
+            return {
+                title: `Import ${work.length} file(s) from the content inbox` + (publish ? ' and sync the website' : ''),
+                details: [
+                    ...items.map(i => `${i.path}: ${i.action}${i.reason ? ' – ' + i.reason : ''}`),
+                    `New posts as: ${c.defaultStatus}`
+                ],
+                diff: '',
+                async apply () {
+                    const entry = await ctx.inbox.run(ctx.site, { trigger: 'agent', publish });
+                    return {
+                        result: { created: entry.created, updated: entry.updated, errors: entry.errors, conflicts: entry.conflicts, synced: entry.synced, problem: entry.error || entry.syncError || '', items: entry.items }
+                    };
+                }
+            };
+        }
+    },
+    {
+        name: 'publish_site',
+        kind: 'write',
+        alwaysAsk: true,
+        description: 'Render the whole website and sync it to the server (like the Sync button). Use when the user asks to publish.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        plan (args, ctx) {
+            if (!ctx.inbox) throw new Error('Publishing is not available.');
+
+            const reason = ctx.inbox.status(ctx.site).canPublish;
+
+            if (reason) throw new Error('Cannot sync automatically: ' + reason + '.');
+
+            return {
+                title: 'Render and sync the website',
+                details: ['All changes saved in Publii go live on the server.'],
+                diff: '',
+                async apply () {
+                    const out = await ctx.inbox.publish(ctx.site);
+                    return { result: { ok: true, issues: !!out.issues } };
                 }
             };
         }

@@ -146,7 +146,7 @@
                             :onClick="() => decide(e, false)">Reject</p-button>
                     </div>
                     <div
-                        v-else-if="e.status === 'applied'"
+                        v-else-if="e.status === 'applied' && e.undoable !== false"
                         class="plus-agent-change-actions">
                         <p-button
                             appearance="outline"

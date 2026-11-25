@@ -38,5 +38,8 @@ export const TOOL_LABELS = {
     create_post: 'Create post',
     update_post: 'Update post',
     write_theme_file: 'Theme file',
-    preview_site: 'Preview'
+    preview_site: 'Preview',
+    inbox_status: 'Checked content inbox',
+    inbox_import: 'Content inbox',
+    publish_site: 'Publish'
 };

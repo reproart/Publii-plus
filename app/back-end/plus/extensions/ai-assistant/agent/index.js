@@ -57,7 +57,7 @@ function systemPrompt (info) {
         'Changes (create_post, update_post, write_theme_file) are shown to the user for approval and can be undone; if one is rejected, ask what to do differently.',
         'The user may attach screenshots or design mockups: compare them with the theme files and posts to find what to change.',
         'Content you write is markdown. Write posts in the website language unless the user asks otherwise.',
-        'You cannot publish to the server: the user syncs the website in Publii. Do not change published posts to draft or vice versa unless asked.',
+        'Publishing to the server (publish_site, inbox_import with publish) always needs the user\'s approval; do it only when asked. Do not change published posts to draft or vice versa unless asked.',
         'Reply in the language the user writes in. Be brief: say what you did and what is left.'
     ].join('\n');
 }
@@ -119,19 +119,18 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
         session.messages.push({ role: 'tool', id: call.id, name: call.name, output: clip(JSON.stringify(result), 30000) });
     }
 
-    function runWrite (session, call, plan, e) {
-        const applied = plan.apply();
-        const change = { id: e.id, title: plan.title, undo: applied.undo, undone: false };
-        session.changes.set(change.id, change);
+    async function runWrite (session, call, plan, e) {
+        const applied = await plan.apply();
+        if (applied.undo) session.changes.set(e.id, { id: e.id, title: plan.title, undo: applied.undo, undone: false });
         session.refresh.push({ kind: call.name === 'write_theme_file' ? 'theme' : 'posts', postId: applied.postId || null });
         e.status = 'applied';
         e.result = applied.result;
-        e.undoable = true;
+        e.undoable = !!applied.undo;
         addToolResult(session, call, applied.result);
     }
 
     /** Handle the tool calls of one model answer; returns true when the loop must wait for the user. */
-    function handleCalls (session, calls) {
+    async function handleCalls (session, calls) {
         for (const call of calls) {
             const tool = toolByName(call.name);
             const e = entry(session, { type: 'tool', name: call.name, callId: call.id });
@@ -143,7 +142,7 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
                 e.args = args;
 
                 if (tool.kind === 'read') {
-                    const result = tool.run(args, session.ctx);
+                    const result = await tool.run(args, session.ctx);
                     e.status = 'done';
                     e.summary = summarize(call.name, args, result);
                     addToolResult(session, call, result);
@@ -151,12 +150,12 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
                     e.status = 'pending';
                     session.pending.push({ callId: call.id, entryId: e.id, name: call.name, kind: 'client', call });
                 } else {
-                    const plan = tool.plan(args, session.ctx);
+                    const plan = await tool.plan(args, session.ctx);
                     e.title = plan.title;
                     e.details = plan.details;
                     e.diff = plan.diff;
 
-                    if (session.autoApprove) runWrite(session, call, plan, e);
+                    if (session.autoApprove && !tool.alwaysAsk) await runWrite(session, call, plan, e);
                     else {
                         e.status = 'pending';
                         session.pending.push({ callId: call.id, entryId: e.id, name: call.name, kind: 'write', call, plan });
@@ -196,7 +195,7 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
 
                 if (answer.text && answer.text.trim()) entry(session, { type: 'assistant', text: answer.text.trim(), model: answer.model || provider.model });
                 if (!answer.toolCalls.length) return;
-                if (handleCalls(session, answer.toolCalls)) return;
+                if (await handleCalls(session, answer.toolCalls)) return;
             }
 
             entry(session, { type: 'notice', text: `Stopped after ${MAX_STEPS} steps. Send "continue" to go on.` });
@@ -304,7 +303,7 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
                         e.result = decision.result || { ok: true };
                         addToolResult(session, p.call, e.result);
                     } else {
-                        runWrite(session, p.call, p.plan, e);
+                        await runWrite(session, p.call, p.plan, e);
                     }
                 } catch (error) {
                     e.status = 'error';

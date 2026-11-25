@@ -22,6 +22,8 @@
                     </span>
                 </router-link>
             </div>
+
+            <plus-slot name="site-tools" /><!-- PUBLII-PLUS -->
         </div>
     </section>
 </template>

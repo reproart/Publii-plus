@@ -116,7 +116,7 @@ function scripted (steps) {
     };
 }
 
-function makeAgent (model, data = fakeData()) {
+function makeAgent (model, data = fakeData(), inbox = null) {
     const sitesDir = makeSite();
     const theme = themeEditor.createService({ getSitesDir: () => sitesDir });
     const agent = createAgent({
@@ -127,6 +127,7 @@ function makeAgent (model, data = fakeData()) {
         makeContext: site => ({
             site,
             data,
+            inbox,
             theme,
             markdownToHtml: md => '<p>' + md.trim() + '</p>',
             createDiff: (a, b, name) => createUnifiedDiff(a, b, { oldName: 'a/' + name, newName: 'b/' + name })
@@ -304,5 +305,60 @@ describe('Publii Plus: AI agent – images', () => {
         assert.deepEqual(model.seen[0].messages[0].images, [PNG]);
         assert.match(model.seen[0].messages[0].text, /attached image/);
         await assert.rejects(agent.send(sessionId, '', {}), /Type a message/);
+    });
+});
+
+describe('Publii Plus: AI agent – content inbox and publishing', () => {
+    function fakeInbox ({ canPublish = '' } = {}) {
+        const calls = [];
+        return {
+            calls,
+            status: () => ({ config: { source: 'github', repo: 'me/site', branch: 'main', folder: 'posts', enabled: true, intervalMinutes: 15, defaultStatus: 'published', autoSync: true }, canPublish, imported: 3, log: [] }),
+            check: async () => ({ items: [{ path: 'a.md', action: 'create' }, { path: 'b.md', action: 'unchanged' }, { path: 'c.md', action: 'conflict', reason: 'edited in Publii' }] }),
+            run: async (site, opts) => { calls.push(['run', opts]); return { created: 1, updated: 0, errors: 0, conflicts: 1, synced: opts.publish, items: [] }; },
+            publish: async () => { calls.push(['publish']); return { ok: true }; }
+        };
+    }
+
+    it('status is read at once; import and publish always ask, even with auto-apply, and cannot be undone', async () => {
+        const inbox = fakeInbox();
+        const model = scripted([
+            { toolCalls: [{ id: 's', name: 'inbox_status' }] },
+            messages => {
+                const status = JSON.parse(messages.at(-1).output);
+                assert.deepEqual(status.next.map(i => i.path), ['a.md', 'c.md']);
+                assert.equal(status.autoSyncPossible, 'yes');
+                return { toolCalls: [{ id: 'imp', name: 'inbox_import', args: { publish: true } }] };
+            },
+            { toolCalls: [{ id: 'pub', name: 'publish_site' }] },
+            { text: 'Published.' }
+        ]);
+        const { agent } = makeAgent(model, fakeData(), inbox);
+        const { sessionId } = agent.start({ site: 'blog', autoApprove: true });
+
+        const first = await agent.send(sessionId, 'Import the inbox and publish');
+        const card = first.entries.find(e => e.name === 'inbox_import');
+        assert.equal(card.status, 'pending', 'auto-apply does not cover publishing');
+        assert.match(card.title, /Import 1 file\(s\) from the content inbox and sync the website/);
+        assert.deepEqual(card.details.slice(0, 2), ['a.md: create', 'c.md: conflict – edited in Publii']);
+        assert.equal(inbox.calls.length, 0);
+
+        const second = await agent.resolve(sessionId, { imp: { approve: true } });
+        assert.deepEqual(inbox.calls, [['run', { trigger: 'agent', publish: true }]]);
+        assert.equal(second.entries.find(e => e.callId === 'imp').undoable, false);
+        assert.equal(second.changes.length, 0, 'nothing to undo');
+        assert.equal(second.pending[0].name, 'publish_site');
+
+        const third = await agent.resolve(sessionId, { pub: { approve: true } });
+        assert.deepEqual(inbox.calls.at(-1), ['publish']);
+        assert.equal(third.entries.at(-1).text, 'Published.');
+    });
+
+    it('publishing is refused with the reason when automatic sync is impossible', async () => {
+        const model = scripted([{ toolCalls: [{ id: 'pub', name: 'publish_site' }] }, { text: 'ok' }]);
+        const { agent } = makeAgent(model, fakeData(), fakeInbox({ canPublish: 'manual deployment' }));
+        const { sessionId } = agent.start({ site: 'blog' });
+        const out = await agent.send(sessionId, 'publish');
+        assert.match(out.entries.find(e => e.name === 'publish_site').error, /Cannot sync automatically: manual deployment/);
     });
 });

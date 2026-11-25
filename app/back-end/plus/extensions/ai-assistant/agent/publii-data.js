@@ -139,20 +139,21 @@ function createPubliiData ({ app, modules = {} }) {
                 LEFT JOIN posts_tags AS pt ON pt.tag_id = t.id GROUP BY t.id ORDER BY t.name`).all();
         },
 
-        /** New draft through Publii's Post model (slug uniqueness, tags, additional data). */
-        createPost (site, { title, text, editor = 'markdown', tags = [], metaTitle = '', metaDescription = '' }) {
+        /** New post through Publii's Post model (slug uniqueness, tags, additional data). Draft unless status is given. */
+        createPost (site, { title, text, editor = 'markdown', tags = [], metaTitle = '', metaDescription = '', slug = '', status = 'draft', flags = [], creationDate = null }) {
             const author = db(site).prepare('SELECT id FROM authors ORDER BY id LIMIT 1').get();
             const now = Date.now();
+            const created = Number.isFinite(creationDate) ? creationDate : now;
             const PostModel = Post();
             const post = new PostModel(app, {
                 site,
                 id: 0,
                 title,
-                slug: createSlug()(title),
+                slug: createSlug()(slug || title),
                 author: author ? author.id : 1,
-                status: 'draft',
+                status: [status === 'published' ? 'published' : 'draft', ...flags.filter(f => ['featured', 'hidden', 'excluded_homepage'].includes(f))].join(','),
                 tags,
-                creationDate: now,
+                creationDate: created,
                 modificationDate: now,
                 template: '',
                 text,
@@ -167,6 +168,39 @@ function createPubliiData ({ app, modules = {} }) {
             return { id: result.postID };
         },
 
+        /** Folder of the post's images (input/media/posts/<id>) */
+        mediaDir (site, id) {
+            return path.join(app.sitesDir, site, 'input', 'media', 'posts', String(Number(id)));
+        },
+
+        /** Last change of a post in Publii (ms) */
+        modifiedAt (site, id) {
+            const r = db(site).prepare('SELECT modified_at FROM posts WHERE id = @id').get({ id: Number(id) });
+            return r ? Number(r.modified_at) : null;
+        },
+
+        exists (site, id) {
+            return !!db(site).prepare("SELECT id FROM posts WHERE id = @id AND status NOT LIKE '%is-page%' AND status NOT LIKE '%trashed%'").get({ id: Number(id) });
+        },
+
+        /** Featured image from a file already in the post's media folder; null removes it. */
+        setFeaturedImage (site, id, image) {
+            const ImageHelper = load('helpers/image.helper.js');
+            const helper = new ImageHelper({
+                application: app,
+                site,
+                id: Number(id),
+                db: db(site),
+                siteDir: path.join(app.sitesDir, site),
+                featuredImage: image ? path.join(this.mediaDir(site, id), image.filename) : '',
+                featuredImageFilename: image ? image.filename : '',
+                featuredImageData: image ? { alt: image.alt || '', caption: image.caption || '', credits: image.credits || '' } : false
+            });
+
+            if (image) helper.save();
+            else helper.delete();
+        },
+
         /** Change only the given fields: title, slug, text, status, tags, metaTitle, metaDescription. */
         updatePost (site, id, fields) {
             const r = row(site, id);
@@ -174,12 +208,28 @@ function createPubliiData ({ app, modules = {} }) {
             const set = {};
 
             if (typeof fields.title === 'string') set.title = fields.title;
-            if (typeof fields.slug === 'string') set.slug = fields.slug;
+            if (typeof fields.slug === 'string' && fields.slug) {
+                // unique among posts and pages, like Publii's editor does
+                const base = createSlug()(fields.slug);
+                let candidate = base;
+
+                for (let n = 2; handle.prepare('SELECT id FROM posts WHERE slug = @slug AND id != @id').get({ slug: candidate, id: r.id }); n++) {
+                    candidate = `${base}-${n}`;
+                }
+
+                set.slug = candidate;
+            }
+            if (Number.isFinite(fields.creationDate)) set.created_at = fields.creationDate;
             if (typeof fields.text === 'string') set.text = fields.text;
 
-            if (typeof fields.status === 'string') {
+            if (typeof fields.status === 'string' || Array.isArray(fields.flags)) {
                 const s = splitStatus(r.status);
-                set.status = [fields.status, ...s.flags].join(',');
+                const status = typeof fields.status === 'string' ? fields.status : s.status;
+                // flags managed here: featured, hidden; others (e.g. trashed, excluded_homepage) are kept
+                const flags = Array.isArray(fields.flags)
+                    ? [...s.flags.filter(f => !['featured', 'hidden'].includes(f)), ...fields.flags.filter(f => ['featured', 'hidden'].includes(f))]
+                    : s.flags;
+                set.status = [status, ...flags].join(',');
             }
 
             const columns = Object.keys(set);

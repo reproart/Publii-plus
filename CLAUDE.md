@@ -48,3 +48,8 @@ Plugin workshop: `app/back-end/plus/extensions/plugin-workshop/` (copies with ba
 AI agent: `app/back-end/plus/extensions/ai-assistant/agent/` (loop with approvals/undo in `index.js`, tools in `tools.js`,
 targeted post updates on Publii's models in `publii-data.js`; tool calling = `chat()` in `providers/index.js`) +
 `app/src/plus/extensions/ai-agent/` (slot `site-sidebar`). Data specs use `node:sqlite` with `app/back-end/sql/1.0.0.sql`.
+
+Content inbox: `app/back-end/plus/extensions/content-inbox/` (front-matter.js YAML subset, sources.js GitHub trees/blobs +
+local folder, importer.js file↔post mapping/conflicts/images via Publii's uploader, publisher.js render+sync with Publii's
+workers, index.js service/scheduler; `getService()` is used by the agent's inbox_* / publish_site tools) +
+`app/src/plus/extensions/content-inbox/` (slot `site-tools`). Agent tools may be async; `alwaysAsk` ignores auto-apply.

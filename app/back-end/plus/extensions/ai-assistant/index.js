@@ -201,9 +201,14 @@ module.exports = {
         function agentContext (site) {
             if (!/^[a-zA-Z0-9_.-]+$/.test(String(site || '')) || String(site).startsWith('.')) throw new Error('Invalid website.');
 
+            let inbox = null;
+
+            try { inbox = require('../content-inbox').getService(); } catch (e) { /* extension not loaded */ }
+
             return {
                 site,
                 data,
+                inbox,
                 theme: themes,
                 markdownToHtml,
                 createDiff: (oldText, newText, name) => createUnifiedDiff(oldText, newText, { oldName: 'a/' + name, newName: 'b/' + name })
