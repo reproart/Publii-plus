@@ -4,6 +4,8 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 возможностями (ИИ, редактор тем, инструменты разработчика). Основа сейчас: **Publii 0.48.3**.
 Версия Publii Plus: `app/back-end/plus/version.json`.
 
+Отложенные задачи и планы — в [TODO.md](TODO.md).
+
 ## Принципы
 
 1. **Свой код — в своих папках.** Всё новое лежит в `app/back-end/plus/` (основной процесс) и
