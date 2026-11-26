@@ -416,6 +416,79 @@ const TOOLS = [
         }
     },
     {
+        name: 'write_alt_texts',
+        kind: 'write',
+        description: 'Write alt texts for images that have none (in posts and pages: content images, galleries, featured images). ' +
+            'Each image is looked at by the model of this chat (it must support images) and gets a short description in the site language; ' +
+            'the user reviews the list before anything is saved. Use after check_site reports image-alt problems or when the user asks. ' +
+            'Without post_ids all posts and pages are scanned.',
+        parameters: {
+            type: 'object',
+            properties: {
+                post_ids: { type: 'array', items: { type: 'integer' }, description: 'Only these posts/pages' },
+                max_images: { type: 'integer', description: 'At most this many images in one go (default 10, max 30)' }
+            },
+            additionalProperties: false
+        },
+        async plan (args, ctx) {
+            if (!ctx.altTexts) throw new Error('AI alt texts are not available.');
+
+            const max = Math.min(30, Math.max(1, parseInt(args.max_images, 10) || 10));
+            const posts = ctx.altTexts.scan(ctx.site, { postIds: Array.isArray(args.post_ids) && args.post_ids.length ? args.post_ids : null });
+            const queue = posts.flatMap(p => p.images.filter(i => i.describable).map(i => ({ post: p, image: i })));
+
+            if (!queue.length) throw new Error('No images without alt text that could be described were found.');
+
+            const changes = new Map();
+            const details = [];
+            let failed = 0;
+            const providerId = ctx.providerId ? ctx.providerId() : '';
+
+            for (const { post, image } of queue.slice(0, max)) {
+                const file = String(image.src).replace(/^#DOMAIN_NAME#/, '').split('/').pop();
+
+                try {
+                    const out = await ctx.altTexts.describe(ctx.site, post.postId, image.id, { providerId });
+
+                    if (!out.alt) {
+                        details.push(`"${post.title}" – ${file}: decorative, left empty`);
+                        continue;
+                    }
+
+                    if (!changes.has(post.postId)) changes.set(post.postId, { postId: post.postId, alts: {}, srcs: {} });
+
+                    changes.get(post.postId).alts[image.id] = out.alt;
+                    changes.get(post.postId).srcs[image.id] = out.src;
+                    details.push(`"${post.title}"${image.kind === 'featured' ? ' (featured image)' : ''} – ${file}: ${out.alt}`);
+                } catch (e) {
+                    failed++;
+                    details.push(`"${post.title}" – ${file}: not described (${e.message})`);
+                }
+            }
+
+            const count = [...changes.values()].reduce((n, c) => n + Object.keys(c.alts).length, 0);
+
+            if (!count) throw new Error('No alt texts could be written: ' + details.join('; '));
+
+            const rest = queue.length - Math.min(queue.length, max);
+
+            if (rest > 0) details.push(`${rest} more image(s) without alt text – ask again to continue.`);
+
+            return {
+                title: `Add alt text to ${count} image(s) in ${changes.size} post(s)/page(s)` + (failed ? ` (${failed} failed)` : ''),
+                details,
+                diff: '',
+                apply () {
+                    const out = ctx.altTexts.apply(ctx.site, [...changes.values()]);
+                    return {
+                        result: { ok: true, posts: out.posts, images: out.images, skipped: out.skipped },
+                        undo: () => (out.undoId ? ctx.altTexts.undo(out.undoId) : null)
+                    };
+                }
+            };
+        }
+    },
+    {
         name: 'preview_site',
         kind: 'client',
         description: 'Render the website preview in Publii and open it in the browser (after changes, when the user wants to see them).',

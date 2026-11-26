@@ -190,6 +190,15 @@ module.exports = {
         const { createUnifiedDiff } = require('../../lib/unified-diff');
         const themes = themeEditor.createService({ getSitesDir: () => ctx.appInstance && ctx.appInstance.sitesDir });
         const data = createPubliiData({ app: ctx.appInstance });
+        const { createAltService } = require('./alt-texts');
+        const altTexts = createAltService({
+            db: site => ctx.appInstance.getDbForSite(site),
+            siteDir: site => path.join(ctx.appInstance.sitesDir, site),
+            language: site => ((ctx.appInstance.sites || {})[site] || {}).language || '',
+            resolveProvider: id => store.resolve(id),
+            generate: options => generateStructured(options),
+            instructions: site => system => withInstructions(system, store.getInstructions(site))
+        });
         const agent = createAgent({
             resolveProvider: id => store.resolve(id),
             chat: options => chat(options),
@@ -214,6 +223,7 @@ module.exports = {
                 data,
                 inbox,
                 siteCheck,
+                altTexts,
                 theme: themes,
                 markdownToHtml,
                 createDiff: (oldText, newText, name) => createUnifiedDiff(oldText, newText, { oldName: 'a/' + name, newName: 'b/' + name })
@@ -228,6 +238,13 @@ module.exports = {
         ctx.handle('agent:history', (event, sessionId) => agent.history(sessionId));
         ctx.handle('agent:close', (event, sessionId) => agent.close(sessionId));
         ctx.handle('agent:store-data', (event, site) => data.storeData(agentContext(site).site));
+
+        // AI alt texts for images in posts and pages (dialog in Tools / Site check, agent tool write_alt_texts)
+        ctx.handle('alt:scan', (event, site, options) => altTexts.scan(site, options || {}));
+        ctx.handle('alt:describe', (event, site, postId, imageId, options) => altTexts.describe(site, postId, imageId, options || {}));
+        ctx.handle('alt:cancel', (event, requestId) => altTexts.cancel(requestId));
+        ctx.handle('alt:apply', (event, site, changes) => altTexts.apply(site, changes));
+        ctx.handle('alt:undo', (event, undoId) => altTexts.undo(undoId));
         ctx.handle('cancel', (event, requestId) => service.cancel(requestId));
     }
 };

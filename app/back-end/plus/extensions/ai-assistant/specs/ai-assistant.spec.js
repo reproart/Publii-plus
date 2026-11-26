@@ -358,6 +358,7 @@ describe('Publii Plus AI: tasks and service', () => {
         extension.register({ paths: { appDir: dir }, handle: name => channels.push(name) });
 
         assert.deepEqual(channels.sort(), ['cancel', 'instructions:get', 'instructions:save', 'presets', 'providers:list', 'providers:models', 'providers:remove', 'providers:save', 'providers:set-default', 'providers:test', 'run',
-            'agent:start', 'agent:send', 'agent:resolve', 'agent:undo', 'agent:cancel', 'agent:history', 'agent:close', 'agent:store-data'].sort());
+            'agent:start', 'agent:send', 'agent:resolve', 'agent:undo', 'agent:cancel', 'agent:history', 'agent:close', 'agent:store-data',
+            'alt:scan', 'alt:describe', 'alt:cancel', 'alt:apply', 'alt:undo'].sort());
     });
 });

@@ -18,7 +18,7 @@
  * The API key comes from the secret store and is passed separately.
  *
  * Every protocol implements:
- *   buildRequest({ config, system, user, schema, schemaName, mode }) -> { path, body }
+ *   buildRequest({ config, system, user, images?, schema, schemaName, mode }) -> { path, body }   images: data URLs
  *   parseResponse(json) -> { text, usage: { input, output } }
  */
 const { requestJson, ProviderHttpError } = require('../http');
@@ -32,8 +32,11 @@ function schemaInstruction (schema) {
 const PROTOCOLS = {
     'openai-responses': {
         label: 'OpenAI Responses API',
-        buildRequest ({ config, system, user, schema, schemaName, mode }) {
-            const body = { model: config.model, instructions: system, input: user };
+        buildRequest ({ config, system, user, images, schema, schemaName, mode }) {
+            const input = images && images.length
+                ? [{ role: 'user', content: [{ type: 'input_text', text: user }, ...images.map(url => ({ type: 'input_image', image_url: url }))] }]
+                : user;
+            const body = { model: config.model, instructions: system, input };
 
             if (schema && mode === 'json_schema') {
                 body.text = { format: { type: 'json_schema', name: schemaName, schema: toStrictSchema(schema), strict: true } };
@@ -141,7 +144,7 @@ const PROTOCOLS = {
 
     'openai-chat': {
         label: 'OpenAI-compatible Chat Completions',
-        buildRequest ({ config, system, user, schema, schemaName, mode }) {
+        buildRequest ({ config, system, user, images, schema, schemaName, mode }) {
             let systemText = system;
             const body = { model: config.model };
 
@@ -153,7 +156,11 @@ const PROTOCOLS = {
                 if (mode === 'json_object') body.response_format = { type: 'json_object' };
             }
 
-            body.messages = [{ role: 'system', content: systemText }, { role: 'user', content: user }];
+            const userContent = images && images.length
+                ? [{ type: 'text', text: user }, ...images.map(url => ({ type: 'image_url', image_url: { url } }))]
+                : user;
+
+            body.messages = [{ role: 'system', content: systemText }, { role: 'user', content: userContent }];
 
             if (typeof config.temperature === 'number') body.temperature = config.temperature;
             if (config.maxOutputTokens) body.max_tokens = config.maxOutputTokens;
@@ -268,7 +275,7 @@ function isResponseFormatError (error) {
  * - falls back from json_schema to prompt-only JSON when the server rejects response_format
  * - one repair round-trip when the JSON is missing or does not match the schema
  */
-async function generateStructured ({ config, apiKey, system, user, schema, schemaName = 'result', signal, fetchImpl }) {
+async function generateStructured ({ config, apiKey, system, user, images, schema, schemaName = 'result', signal, fetchImpl }) {
     const protocol = PROTOCOLS[config.type];
 
     if (!protocol) throw new Error(`Unknown provider type "${config.type}".`);
@@ -276,8 +283,9 @@ async function generateStructured ({ config, apiKey, system, user, schema, schem
 
     let mode = config.structuredOutput || 'json_schema';
 
-    const call = async (userText) => {
-        const { path, body } = protocol.buildRequest({ config, system, user: userText, schema, schemaName, mode });
+    // the repair request (below) only fixes the format of the previous reply – no need to send the images again
+    const call = async (userText, withImages = true) => {
+        const { path, body } = protocol.buildRequest({ config, system, user: userText, images: withImages ? images : undefined, schema, schemaName, mode });
         const json = await requestJson({
             url: normalizeBaseUrl(config.baseUrl) + path,
             headers: authHeaders(config, apiKey),
@@ -315,7 +323,7 @@ async function generateStructured ({ config, apiKey, system, user, schema, schem
     }
 
     if (problems.length) {
-        const repair = await call(`${user}\n\n---\nYour previous reply was:\n${result.text}\n\nIt is invalid: ${problems.join('; ')}.\nReturn the corrected JSON object only.`);
+        const repair = await call(`${user}\n\n---\nYour previous reply was:\n${result.text}\n\nIt is invalid: ${problems.join('; ')}.\nReturn the corrected JSON object only.`, false);
         usage.input += repair.usage.input;
         usage.output += repair.usage.output;
         data = parseJsonFromText(repair.text);

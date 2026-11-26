@@ -116,7 +116,7 @@ function scripted (steps) {
     };
 }
 
-function makeAgent (model, data = fakeData(), inbox = null, siteCheck = null) {
+function makeAgent (model, data = fakeData(), inbox = null, siteCheck = null, altTexts = null) {
     const sitesDir = makeSite();
     const theme = themeEditor.createService({ getSitesDir: () => sitesDir });
     const agent = createAgent({
@@ -129,6 +129,7 @@ function makeAgent (model, data = fakeData(), inbox = null, siteCheck = null) {
             data,
             inbox,
             siteCheck,
+            altTexts,
             theme,
             markdownToHtml: md => '<p>' + md.trim() + '</p>',
             createDiff: (a, b, name) => createUnifiedDiff(a, b, { oldName: 'a/' + name, newName: 'b/' + name })
@@ -402,5 +403,50 @@ describe('Publii Plus: AI agent – site check', () => {
         assert.deepEqual(runs, [['blog', { rerender: true, external: true }]], 'last_report does not run again');
         assert.equal(out.entries.filter(e => e.name === 'check_site').length, 2);
         assert.match(out.entries.at(-1).text, /alt text/);
+    });
+});
+
+describe('Publii Plus: AI agent – alt texts', () => {
+    it('write_alt_texts describes images with the chat provider, shows them for approval, applies and undoes', async () => {
+        const calls = [];
+        const altTexts = {
+            scan: (site, opts) => {
+                calls.push(['scan', opts.postIds]);
+                return [
+                    { postId: 7, title: 'First', images: [{ id: 'featured', kind: 'featured', src: 'cover.png', describable: true }, { id: 'c0', kind: 'content', src: '#DOMAIN_NAME#a.png', describable: true }, { id: 'c1', src: 'https://x.org/e.png', describable: false }] },
+                    { postId: 8, title: 'Second', images: [{ id: 'c0', kind: 'content', src: '#DOMAIN_NAME#b.png', describable: true }] }
+                ];
+            },
+            describe: async (site, postId, imageId, opts) => {
+                calls.push(['describe', postId, imageId, opts.providerId]);
+                if (postId === 8) throw new Error('model has no vision');
+                return { alt: imageId === 'featured' ? 'Clinic entrance' : '', decorative: imageId !== 'featured', src: imageId === 'featured' ? 'cover.png' : '#DOMAIN_NAME#a.png' };
+            },
+            apply: (site, changes) => { calls.push(['apply', changes]); return { posts: 1, images: 1, skipped: 0, undoId: 'u1' }; },
+            undo: id => { calls.push(['undo', id]); return { posts: 1 }; }
+        };
+        const model = scripted([
+            { toolCalls: [{ id: 'alt', name: 'write_alt_texts', args: { post_ids: [7, 8] } }] },
+            { text: 'Saved one alt text.' }
+        ]);
+        const { agent } = makeAgent(model, fakeData(), null, null, altTexts);
+        const { sessionId } = agent.start({ site: 'blog', providerId: 'vision-model' });
+        const first = await agent.send(sessionId, 'Describe the images');
+        const card = first.entries.find(e => e.name === 'write_alt_texts');
+
+        assert.equal(card.status, 'pending');
+        assert.equal(card.title, 'Add alt text to 1 image(s) in 1 post(s)/page(s) (1 failed)');
+        assert.deepEqual(card.details, [
+            '"First" (featured image) – cover.png: Clinic entrance',
+            '"First" – a.png: decorative, left empty',
+            '"Second" – b.png: not described (model has no vision)'
+        ]);
+        assert.deepEqual(calls.filter(c => c[0] === 'describe').map(c => c[3]), ['vision-model', 'vision-model', 'vision-model']);
+
+        await agent.resolve(sessionId, { alt: { approve: true } });
+        assert.deepEqual(calls.find(c => c[0] === 'apply')[1], [{ postId: 7, alts: { featured: 'Clinic entrance' }, srcs: { featured: 'cover.png' } }]);
+
+        agent.undo(sessionId, agent.history(sessionId).entries.find(e => e.name === 'write_alt_texts').id);
+        assert.deepEqual(calls.at(-1), ['undo', 'u1']);
     });
 });

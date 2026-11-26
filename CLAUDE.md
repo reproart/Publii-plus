@@ -57,3 +57,7 @@ workers, index.js service/scheduler; `getService()` is used by the agent's inbox
 Site check: `app/back-end/plus/extensions/site-check/` (render like Sync via content-inbox `publisher.render`, `scanner.js` parse5,
 `checks.js` offline checks, `external.js` link checker with cache, service + `check_site` agent tool) +
 `app/src/plus/extensions/site-check/` (slots `site-tools`, `sync-popup`).
+
+AI alt texts: `app/back-end/plus/extensions/ai-assistant/alt-texts/` (images.js walks markdown/HTML/block JSON in document order –
+ids `featured`/`c<n>`, describe.js vision request via `generateStructured({ images })`, index.js scan/describe/apply/undo;
+IPC `alt:*`, agent tool `write_alt_texts`) + `app/src/plus/extensions/ai-assistant/AltTexts.vue` (opened from Site check).

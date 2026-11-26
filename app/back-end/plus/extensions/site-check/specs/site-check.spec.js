@@ -64,11 +64,13 @@ describe('Publii Plus: site check – analysis', () => {
     it('images: missing alt (decorative alt="" is fine), heavy files; heavy pages', () => {
         const dir = site({
             ...baseFiles(),
-            'index.html': page({ body: '<img src="media/posts/1/photo.jpg"><img src="media/posts/1/photo.jpg" alt=""><img src="media/posts/1/photo.jpg" aria-hidden="true"><img src="media/posts/1/big.jpg" alt="Big" srcset="media/posts/1/photo.jpg 300w, media/posts/1/big.jpg 1200w">' })
+            'assets/deco.svg': '<svg/>',
+            'media/posts/1/second.jpg': Buffer.alloc(10),
+            'index.html': page({ body: '<img src="media/posts/1/photo.jpg"><img src="media/posts/1/photo.jpg" alt=""><img src="media/posts/1/second.jpg" alt=" "><img src="assets/deco.svg" alt=""><img src="media/posts/1/photo.jpg" aria-hidden="true"><img src="media/posts/1/big.jpg" alt="Big" srcset="media/posts/1/photo.jpg 300w, media/posts/1/big.jpg 1200w">' })
         });
         const { issues } = analyze({ outputDir: dir, domain: 'https://example.com/blog' });
 
-        assert.deepEqual(byCheck(issues, 'image-alt').map(i => i.target), ['media/posts/1/photo.jpg']);
+        assert.deepEqual(byCheck(issues, 'image-alt').map(i => [i.target, i.detail.startsWith('Image without alt')]), [['media/posts/1/photo.jpg', true], ['media/posts/1/second.jpg', false]], 'empty alt on post images counts, theme images with alt="" are decorative');
         const heavy = byCheck(issues, 'image-heavy');
         assert.equal(heavy.length, 1);
         assert.equal(heavy[0].target, 'media/posts/1/big.jpg');

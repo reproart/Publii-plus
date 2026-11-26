@@ -102,6 +102,14 @@
                         <span class="plus-check-count">{{ group.items.length }}</span>
                         <span class="plus-check-muted plus-check-help">{{ group.help }}</span>
                     </summary>
+                    <div
+                        v-if="group.check === 'image-alt'"
+                        class="plus-check-group-action">
+                        <p-button
+                            size="small"
+                            :onClick="() => { altOpen = true; }">Write alt texts with AI</p-button>
+                        <span class="plus-check-muted">Describes the images of posts and pages with your AI provider; you review the texts before saving.</span>
+                    </div>
                     <ul class="plus-check-list">
                         <li
                             v-for="(issue, i) in group.items.slice(0, group.limit)"
@@ -155,16 +163,22 @@
                     class="plus-check-muted">The report shows the first 3000 results.</p>
             </template>
         </div>
+
+        <plus-alt-texts
+            v-if="altOpen"
+            @close="altClosed" />
     </div>
 </template>
 
 <script>
 import { CHECKS, SEVERITY, ago, reportMarkdown } from './labels.js';
+import AltTexts from '../ai-assistant/AltTexts.vue';
 
 const ORDER = { error: 0, warning: 1, notice: 2 };
 
 export default {
     name: 'plus-site-check',
+    components: { 'plus-alt-texts': AltTexts },
     props: {
         autoRun: { type: Boolean, default: false }
     },
@@ -179,6 +193,7 @@ export default {
             query: '',
             limits: {},
             copied: false,
+            altOpen: false,
             timer: null
         };
     },
@@ -292,6 +307,12 @@ export default {
         edit (item) {
             this.$emit('close');
             this.$router.push(`/site/${this.site}/${item.type === 'page' ? 'pages' : 'posts'}/editor/${item.editor}/${item.id}`);
+        },
+        altClosed (result) {
+            this.altOpen = false;
+
+            // the texts are in the posts now – check again (without rendering takes the old files, so render)
+            if (result && result.saved) this.run(true);
         },
         async copy () {
             try {
@@ -490,6 +511,14 @@ export default {
 
 .plus-check-page {
     font-weight: var(--font-weight-semibold);
+}
+
+.plus-check-group-action {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
 }
 
 .plus-check-target {

@@ -221,6 +221,9 @@ function createAgent ({ resolveProvider, chat, makeContext, getInstructions = ()
             const ctx = makeContext(site);
             const info = ctx.data.siteInfo(site);
             const id = crypto.randomUUID();
+
+            // tools that call the model themselves (e.g. write_alt_texts) use the provider chosen in the chat
+            ctx.providerId = () => (sessions.get(id) || {}).providerId || '';
             const instructions = getInstructions(site);
 
             sessions.set(id, {

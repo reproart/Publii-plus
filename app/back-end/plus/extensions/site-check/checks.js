@@ -215,10 +215,15 @@ function analyze ({ outputDir, domain, siteNoIndex = false, itemFor = () => null
         }
 
         // ---- images ----
-        const altMissing = new Set();
+        const altMissing = new Map();
 
         for (const img of page.images) {
-            if (img.alt === null && !img.hidden && img.role !== 'presentation' && img.src) altMissing.add(img.src);
+            // Publii's editors insert alt="" by default, so an empty alt on a post image means "not described";
+            // theme images (assets/) with alt="" are decorative on purpose
+            const contentImage = /(^|\/)media\/(posts|files)\//.test(img.src);
+            const missing = img.alt === null || (contentImage && !img.alt.trim());
+
+            if (missing && !img.hidden && img.role !== 'presentation' && img.src && !altMissing.has(img.src)) altMissing.set(img.src, img.alt === null);
 
             // heavy image files actually shown: src, or the largest srcset candidate up to ~1600px
             const candidates = img.srcset.length ? img.srcset.filter(c => !c.w || c.w <= 1600) : [];
@@ -244,8 +249,13 @@ function analyze ({ outputDir, domain, siteNoIndex = false, itemFor = () => null
             }
         }
 
-        for (const src of altMissing) {
-            add('warning', 'image-alt', rel, { target: src, detail: 'Image without alt text (screen readers, image search). Decorative images need alt="".' });
+        for (const [src, noAttribute] of altMissing) {
+            add('warning', 'image-alt', rel, {
+                target: src,
+                detail: noAttribute
+                    ? 'Image without alt text (screen readers, image search). Decorative images need alt="".'
+                    : 'Image of a post without a description (empty alt).'
+            });
         }
 
         // ---- weight ----

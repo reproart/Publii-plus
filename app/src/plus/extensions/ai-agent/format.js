@@ -40,6 +40,7 @@ export const TOOL_LABELS = {
     write_theme_file: 'Theme file',
     preview_site: 'Preview',
     check_site: 'Checked the website',
+    write_alt_texts: 'Alt texts',
     inbox_status: 'Checked content inbox',
     inbox_import: 'Content inbox',
     publish_site: 'Publish'
