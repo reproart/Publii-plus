@@ -61,3 +61,9 @@ Site check: `app/back-end/plus/extensions/site-check/` (render like Sync via con
 AI alt texts: `app/back-end/plus/extensions/ai-assistant/alt-texts/` (images.js walks markdown/HTML/block JSON in document order –
 ids `featured`/`c<n>`, describe.js vision request via `generateStructured({ images })`, index.js scan/describe/apply/undo;
 IPC `alt:*`, agent tool `write_alt_texts`) + `app/src/plus/extensions/ai-assistant/AltTexts.vue` (opened from Site check).
+
+Translations: `app/back-end/plus/extensions/translations/` (segments.js splits markdown/HTML/block JSON into pieces, translate.js
+batches + fields/tags request, links.js maps `#INTERNAL_LINK#` to the target site (marker `plus-src-<id>` until mapped),
+engine.js plan/write into other sites' DBs – opened synchronously only for one write via `app.setDbForSite`/`closeDbForSite`,
+index.js service/scheduler/state in `config/publii-plus-translations/`) + `app/src/plus/extensions/translations/` (slot `site-tools`).
+Uses `require('../ai-assistant').getStore()` for providers. Same slug in every language; source DB is never written.

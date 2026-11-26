@@ -149,11 +149,15 @@ function createService ({ store, fetchImpl, createSlug = null }) {
     };
 }
 
+let sharedStore = null;
+
 module.exports = {
     id: 'ai-assistant',
     withInstructions,
     name: 'AI Assistant',
     createService,
+    /** Providers and instructions (main process), for other extensions (translations) */
+    getStore: () => sharedStore,
 
     register (ctx) {
         let passwordStorage = null;
@@ -172,6 +176,8 @@ module.exports = {
             safeStorage
         });
         const service = createService({ store, createSlug });
+
+        sharedStore = store;
 
         ctx.handle('presets', () => service.presets());
         ctx.handle('providers:list', () => service.list());

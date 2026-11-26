@@ -139,8 +139,11 @@ function createPubliiData ({ app, modules = {} }) {
                 LEFT JOIN posts_tags AS pt ON pt.tag_id = t.id GROUP BY t.id ORDER BY t.name`).all();
         },
 
-        /** New post through Publii's Post model (slug uniqueness, tags, additional data). Draft unless status is given. */
-        createPost (site, { title, text, editor = 'markdown', tags = [], metaTitle = '', metaDescription = '', slug = '', status = 'draft', flags = [], creationDate = null }) {
+        /**
+         * New post through Publii's Post model (slug uniqueness, tags, additional data). Draft unless status is given.
+         * extra: more _core fields (e.g. metaRobots, mainTag as a tag name), viewSettings: postViewSettings.
+         */
+        createPost (site, { title, text, editor = 'markdown', tags = [], metaTitle = '', metaDescription = '', slug = '', status = 'draft', flags = [], creationDate = null, template = '', extra = {}, viewSettings = {} }) {
             const author = db(site).prepare('SELECT id FROM authors ORDER BY id LIMIT 1').get();
             const now = Date.now();
             const created = Number.isFinite(creationDate) ? creationDate : now;
@@ -155,13 +158,13 @@ function createPubliiData ({ app, modules = {} }) {
                 tags,
                 creationDate: created,
                 modificationDate: now,
-                template: '',
+                template: template || '',
                 text,
                 featuredImage: '',
                 featuredImageFilename: '',
                 featuredImageData: { alt: '', caption: '', credits: '' },
-                additionalData: { metaTitle, metaDesc: metaDescription, metaRobots: 'index, follow', canonicalUrl: '', editor },
-                postViewSettings: {}
+                additionalData: { metaRobots: 'index, follow', canonicalUrl: '', ...extra, metaTitle, metaDesc: metaDescription, editor },
+                postViewSettings: viewSettings && typeof viewSettings === 'object' ? viewSettings : {}
             });
             const result = post.save();
 
