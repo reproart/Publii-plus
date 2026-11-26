@@ -53,3 +53,7 @@ Content inbox: `app/back-end/plus/extensions/content-inbox/` (front-matter.js YA
 local folder, importer.js file↔post mapping/conflicts/images via Publii's uploader, publisher.js render+sync with Publii's
 workers, index.js service/scheduler; `getService()` is used by the agent's inbox_* / publish_site tools) +
 `app/src/plus/extensions/content-inbox/` (slot `site-tools`). Agent tools may be async; `alwaysAsk` ignores auto-apply.
+
+Site check: `app/back-end/plus/extensions/site-check/` (render like Sync via content-inbox `publisher.render`, `scanner.js` parse5,
+`checks.js` offline checks, `external.js` link checker with cache, service + `check_site` agent tool) +
+`app/src/plus/extensions/site-check/` (slots `site-tools`, `sync-popup`).

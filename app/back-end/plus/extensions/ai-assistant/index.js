@@ -205,10 +205,15 @@ module.exports = {
 
             try { inbox = require('../content-inbox').getService(); } catch (e) { /* extension not loaded */ }
 
+            let siteCheck = null;
+
+            try { siteCheck = require('../site-check').getService(); } catch (e) { /* extension not loaded */ }
+
             return {
                 site,
                 data,
                 inbox,
+                siteCheck,
                 theme: themes,
                 markdownToHtml,
                 createDiff: (oldText, newText, name) => createUnifiedDiff(oldText, newText, { oldName: 'a/' + name, newName: 'b/' + name })

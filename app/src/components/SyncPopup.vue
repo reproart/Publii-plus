@@ -123,6 +123,8 @@
                     </p>
                 </div>
 
+                <plus-slot v-if="!syncInProgress" name="sync-popup" /><!-- PUBLII-PLUS -->
+
                 <sync-progress
                     :phase="syncPhase"
                     :progress="syncProgress"

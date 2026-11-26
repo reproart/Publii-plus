@@ -116,7 +116,7 @@ function scripted (steps) {
     };
 }
 
-function makeAgent (model, data = fakeData(), inbox = null) {
+function makeAgent (model, data = fakeData(), inbox = null, siteCheck = null) {
     const sitesDir = makeSite();
     const theme = themeEditor.createService({ getSitesDir: () => sitesDir });
     const agent = createAgent({
@@ -128,6 +128,7 @@ function makeAgent (model, data = fakeData(), inbox = null) {
             site,
             data,
             inbox,
+            siteCheck,
             theme,
             markdownToHtml: md => '<p>' + md.trim() + '</p>',
             createDiff: (a, b, name) => createUnifiedDiff(a, b, { oldName: 'a/' + name, newName: 'b/' + name })
@@ -360,5 +361,46 @@ describe('Publii Plus: AI agent – content inbox and publishing', () => {
         const { sessionId } = agent.start({ site: 'blog' });
         const out = await agent.send(sessionId, 'publish');
         assert.match(out.entries.find(e => e.name === 'publish_site').error, /Cannot sync automatically: manual deployment/);
+    });
+});
+
+describe('Publii Plus: AI agent – site check', () => {
+    it('check_site runs without asking and gives grouped problems with post ids', async () => {
+        const runs = [];
+        const report = {
+            at: Date.UTC(2026, 10, 26),
+            pages: 12,
+            counts: { error: 1, warning: 2, notice: 0 },
+            external: { checked: false, total: 3 },
+            issues: [
+                { severity: 'error', check: 'broken-link', page: 'index.html', target: '/gone/', text: 'Old post' },
+                { severity: 'warning', check: 'image-alt', page: 'first/index.html', item: { type: 'post', id: 7, title: 'First' }, target: 'media/posts/7/a.jpg' },
+                { severity: 'warning', check: 'image-alt', page: 'second/index.html', item: { type: 'post', id: 8, title: 'Second' }, target: 'media/posts/8/b.jpg' }
+            ]
+        };
+        const siteCheck = {
+            run: async (site, opts) => { runs.push([site, opts]); return report; },
+            report: () => report
+        };
+        const model = scripted([
+            { toolCalls: [{ id: 'c', name: 'check_site', args: { external_links: true } }] },
+            messages => {
+                const out = JSON.parse(messages.at(-1).output);
+                assert.deepEqual(out.counts, { error: 1, warning: 2, notice: 0 });
+                assert.equal(out.externalLinks, 'not checked');
+                assert.equal(out.problems['image-alt'].count, 2);
+                assert.deepEqual(out.problems['image-alt'].examples[0], { page: 'first/index.html', postId: 7, title: 'First', target: 'media/posts/7/a.jpg' });
+                assert.deepEqual(out.problems['broken-link'].examples[0], { page: 'index.html', target: '/gone/', linkText: 'Old post' });
+                return { toolCalls: [{ id: 'l', name: 'check_site', args: { last_report: true } }] };
+            },
+            { text: 'Two images need alt text.' }
+        ]);
+        const { agent } = makeAgent(model, fakeData(), null, siteCheck);
+        const { sessionId } = agent.start({ site: 'blog' });
+        const out = await agent.send(sessionId, 'Check the site');
+
+        assert.deepEqual(runs, [['blog', { rerender: true, external: true }]], 'last_report does not run again');
+        assert.equal(out.entries.filter(e => e.name === 'check_site').length, 2);
+        assert.match(out.entries.at(-1).text, /alt text/);
     });
 });

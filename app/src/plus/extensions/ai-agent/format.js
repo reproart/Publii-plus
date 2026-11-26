@@ -39,6 +39,7 @@ export const TOOL_LABELS = {
     update_post: 'Update post',
     write_theme_file: 'Theme file',
     preview_site: 'Preview',
+    check_site: 'Checked the website',
     inbox_status: 'Checked content inbox',
     inbox_import: 'Content inbox',
     publish_site: 'Publish'

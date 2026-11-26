@@ -28,6 +28,7 @@ Publii Plus — форк [GetPublii/Publii](https://github.com/GetPublii/Publii)
 | `app/src/components/post-editor/Sidebar.vue` | `<plus-slot name="post-editor-sidebar" :context="$parent" />` перед «Other options» | панель AI Assistant в редакторе |
 | `app/src/components/AppSettings.vue` | `<plus-slot name="app-settings" />` после последней группы | настройки AI-провайдеров |
 | `app/src/components/Tools.vue` | `<plus-slot name="site-tools" />` под плитками инструментов | Content inbox |
+| `app/src/components/SyncPopup.vue` | `<plus-slot name="sync-popup" />` над индикатором Sync (пока синхронизация не идёт) | итог последней проверки сайта перед публикацией |
 | `app/src/components/Sidebar.vue` | `<plus-slot name="site-sidebar" />` перед кнопкой Preview | кнопка «AI agent» |
 | `app/src/components/ThemeSettings.vue` | `<plus-slot name="theme-settings" />` под заголовком | кнопка «Edit theme files» |
 | `app/src/components/AppPlugins.vue`, `AppThemes.vue` | `<plus-slot name="app-plugins" / "app-themes">` под заголовком | менеджер расширений, мастерская плагинов |
@@ -110,6 +111,7 @@ npm run prod
 | `app-plugins`, `app-themes` | страницы Plugins и Themes приложения | `'plugin'` / `'theme'` |
 | `site-sidebar` | боковое меню сайта, над кнопкой Preview | — |
 | `site-tools` | страница Tools сайта, под плитками | — |
+| `sync-popup` | окно Sync, перед запуском (над индикатором) | — |
 
 ## AI Assistant (расширение `ai-assistant`)
 
@@ -154,6 +156,7 @@ npm run prod
   - изменять: создать черновик (Markdown), изменить запись — заголовок, текст, теги, SEO title / meta description,
     статус draft/published; изменить или создать файл темы (сохраняется в `<тема>-override`, как в редакторе темы);
   - открыть предпросмотр сайта (Preview).
+  - проверить сайт (битые ссылки, картинки без alt, SEO и т. д.) или прочитать последний отчёт проверки — и затем исправить записи;
   - Content inbox: посмотреть состояние и что будет импортировано, импортировать сейчас; опубликовать сайт (рендер + Sync).
     Импорт и публикация **всегда** требуют подтверждения, даже при «Apply changes without asking»; их нельзя отменить через Undo.
 - **Картинки** (скриншоты, макеты дизайна): вставка из буфера (Ctrl/Cmd+V в поле сообщения), перетаскивание в панель или
@@ -255,3 +258,30 @@ npm run prod
 - **Файлы**: настройки `Documents/Publii/config/publii-plus-inbox.json`, связь и журнал —
   `config/publii-plus-inbox/<сайт>.json`.
 - Для тестов: `PUBLII_PLUS_GITHUB_API` подменяет адрес GitHub API.
+
+## Проверка сайта (расширение `site-check`)
+
+- **Где**: сайт → Tools → блок «Site check» → «Open site check». В окне Sync перед запуском — строка с итогом последней
+  проверки и ссылкой «Check before syncing» / «Show report».
+- **Что проверяется**: «Check site» рендерит сайт так же, как Sync (в папку `output`, ничего не публикуется), и читает
+  каждую страницу:
+  - битые внутренние ссылки (в том числе на удалённые записи), отсутствующие файлы (картинки, CSS, JS, адаптивные
+    версии картинок — с подсказкой «Tools → Regenerate thumbnails»), ссылки на несуществующие разделы `#id`;
+  - картинки без `alt` (декоративные с `alt=""` — нормально), тяжёлые картинки (> 500 КБ), тяжёлые страницы (> 3 МБ:
+    HTML, стили, скрипты, картинки — для `srcset` считается файл, который выберет браузер);
+  - SEO: нет `<title>`, одинаковые и длинные (> 70 символов) заголовки, нет или одинаковые meta description, нет или
+    несколько H1, `noindex` у сайта/главной/записей, `robots.txt` с `Disallow: /`, canonical на другой сайт или на
+    несуществующую страницу, нет `lang`;
+  - ресурсы по `http://` на `https://` сайте;
+  - с галочкой «External links» — все внешние ссылки (HEAD, при необходимости GET; не больше 8 запросов сразу и 2 на
+    сайт; 12 с на ответ; рабочие ссылки запоминаются на 7 дней). 404/410/нет домена — ошибка; ошибки сервера и
+    тайм-ауты — предупреждение; отказ проверять (403/429) и соцсети — «не проверено»; ссылка ведёт на другой сайт —
+    заметка.
+- Страницы 404/поиска и страницы пагинации не участвуют в проверках SEO; записи и страницы Publii узнаются по slug —
+  у них кнопка «Edit» (открывает нужный редактор). «Check last render» проверяет без нового рендера.
+  «Copy report» — отчёт в Markdown.
+- **ИИ-агент**: инструмент `check_site` (без подтверждения, ничего не меняет) — сводка по проверкам с примерами и id
+  записей; агент может сразу предложить исправления (alt, meta description, ссылки).
+- **Файлы**: `Documents/Publii/config/publii-plus-site-check/<сайт>.json` — последний отчёт и кэш внешних ссылок.
+- Код: `app/back-end/plus/extensions/site-check/` (`scanner.js` — разбор HTML на parse5, `checks.js` — проверки,
+  `external.js` — внешние ссылки, `index.js` — сервис), интерфейс `app/src/plus/extensions/site-check/`.

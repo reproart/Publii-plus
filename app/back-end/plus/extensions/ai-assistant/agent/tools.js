@@ -366,6 +366,56 @@ const TOOLS = [
         }
     },
     {
+        name: 'check_site',
+        kind: 'read',
+        description: 'Check the website before publishing: renders it like Sync (nothing is published) and reports broken links and ' +
+            'missing files, images without alt text, heavy images/pages, titles, meta descriptions, H1, noindex/robots.txt/canonical, ' +
+            'insecure http resources; optionally external links (slower). Use "last_report" to read the previous result without checking again. ' +
+            'Results name the post/page id when the problem is in a post or page, so you can fix it with update_post.',
+        parameters: {
+            type: 'object',
+            properties: {
+                external_links: { type: 'boolean', description: 'Also open every link to other websites (takes longer). Default false.' },
+                last_report: { type: 'boolean', description: 'Only return the last report, do not check again. Default false.' }
+            },
+            additionalProperties: false
+        },
+        run: async (args, ctx) => {
+            if (!ctx.siteCheck) throw new Error('The site check is not available.');
+
+            const report = args.last_report
+                ? ctx.siteCheck.report(ctx.site)
+                : await ctx.siteCheck.run(ctx.site, { rerender: true, external: !!args.external_links });
+
+            if (!report) return { result: 'The website has not been checked yet.' };
+
+            const byCheck = {};
+
+            for (const i of report.issues) {
+                const list = byCheck[i.check] || (byCheck[i.check] = { severity: i.severity, count: 0, examples: [] });
+                list.count++;
+
+                if (list.examples.length < 8) {
+                    list.examples.push({
+                        page: i.page || 'website',
+                        ...(i.item ? { [i.item.type + 'Id']: i.item.id, title: i.item.title } : {}),
+                        ...(i.target ? { target: clip(i.target, 160) } : {}),
+                        ...(i.text ? { linkText: i.text } : {}),
+                        ...(i.detail ? { detail: i.detail } : {})
+                    });
+                }
+            }
+
+            return {
+                checkedAt: new Date(report.at).toISOString(),
+                pages: report.pages,
+                counts: report.counts,
+                externalLinks: report.external.checked ? report.external : 'not checked',
+                problems: byCheck
+            };
+        }
+    },
+    {
         name: 'preview_site',
         kind: 'client',
         description: 'Render the website preview in Publii and open it in the browser (after changes, when the user wants to see them).',

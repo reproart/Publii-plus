@@ -94,6 +94,8 @@ function createPublisher ({ app, forkWorker, logsDir = () => null, saveSyncStatu
 
     return {
         canPublish: site => canPublish(app.sites && app.sites[site]),
+        /** Render only (to the "output" folder, like the first step of Sync) – used by the site check */
+        render,
         get busy () {
             return running;
         },
